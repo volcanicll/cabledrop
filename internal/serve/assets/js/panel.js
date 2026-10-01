@@ -50,12 +50,9 @@ function render(s) {
   // shared dir
   $('dirPath').textContent = shortPath(s.serveDir);
 
-  // transfers
-  const tx = s.transfers || [];
-  $('clearTx').hidden = !tx.some((t) => t.state !== 'running');
-  $('txCard').innerHTML = tx.length === 0
-    ? '<div class="empty">还没有传输记录</div>'
-    : tx.map(txRow).join('');
+  // transfers — patched incrementally: rebuilding this list every two
+  // seconds flickered and threw away the scroll position mid-read.
+  renderTransfers(s.transfers || []);
 
   // error
   $('errorBox').innerHTML = s.error
@@ -67,17 +64,105 @@ function render(s) {
   $('footAdb').textContent = !s.adbFound ? '未找到 adb' : (s.connected ? '' : '等待设备');
 }
 
-function txRow(t) {
+/* ---------------- transfers, incremental ---------------- */
+
+// txRows maps transfer id → its row element plus a signature of everything
+// the row displays, so unchanged rows are untouched across polls.
+const txRows = new Map();
+
+function elapsedText(startedAt) {
+  if (!startedAt) return '';
+  const s = Math.max(0, Math.round((Date.now() - startedAt) / 1000));
+  if (s < 60) return s + 's';
+  return Math.floor(s / 60) + ':' + String(s % 60).padStart(2, '0');
+}
+
+function renderTransfers(tx) {
+  const card = $('txCard');
+
+  if (!tx.length) {
+    for (const rec of txRows.values()) rec.el.remove();
+    txRows.clear();
+    if (!card.querySelector('.empty')) {
+      card.innerHTML = '<div class="empty">还没有传输记录</div>';
+    }
+    $('clearTx').hidden = true;
+    return;
+  }
+  const empty = card.querySelector('.empty');
+  if (empty) empty.remove();
+
+  let ref = card.firstElementChild;
+  for (const t of tx) {
+    let rec = txRows.get(t.id);
+    if (!rec) {
+      const el = document.createElement('div');
+      el.className = 'tx';
+      el.dataset.txId = t.id;
+      el.innerHTML = `<svg class="ic tx-ic"><use href="#i-up"/></svg>
+        <span class="row-main">
+          <span class="row-title"></span>
+          <span class="row-sub"></span>
+        </span>
+        <span class="tx-pct" hidden></span>
+        <span class="tx-bar" hidden><i></i></span>`;
+      txRows.set(t.id, rec = { el, sig: '' });
+    }
+    const sig = [t.state, t.detail || '', t.percent ?? '',
+                 t.indeterminate ? 1 : 0, t.indeterminate ? elapsedText(t.startedAt) : ''].join('|');
+    if (rec.sig !== sig) {
+      patchTxRow(rec.el, t);
+      rec.sig = sig;
+    }
+    if (rec.el === ref) {
+      ref = ref.nextSibling;
+    } else {
+      card.insertBefore(rec.el, ref);
+    }
+  }
+  // Anything still queued after the placed rows is stale.
+  while (ref) {
+    const next = ref.nextSibling;
+    if (ref.dataset && ref.dataset.txId) txRows.delete(ref.dataset.txId);
+    ref.remove();
+    ref = next;
+  }
+
+  $('clearTx').hidden = !tx.some((t) => t.state !== 'running');
+}
+
+function patchTxRow(el, t) {
   const icon = t.state === 'running' ? 'i-refresh'
     : t.state === 'failed' ? 'i-alert'
     : t.kind === 'push' ? 'i-up' : 'i-down';
-  return `<div class="tx">
-    <svg class="ic tx-ic ${t.state}"><use href="#${icon}"/></svg>
-    <span class="row-main">
-      <span class="row-title">${esc(t.name)}</span>
-      <span class="row-sub">${esc(t.detail || '')}</span>
-    </span>
-  </div>`;
+  el.querySelector('.tx-ic').outerHTML =
+    `<svg class="ic tx-ic ${t.state}"><use href="#${icon}"/></svg>`;
+  el.querySelector('.row-title').textContent = t.name;
+
+  const sub = el.querySelector('.row-sub');
+  const pct = el.querySelector('.tx-pct');
+  const bar = el.querySelector('.tx-bar');
+
+  if (t.state === 'running') {
+    if (t.percent != null) {
+      sub.textContent = '';
+      pct.hidden = false;
+      pct.textContent = Math.round(t.percent) + '%';
+      bar.hidden = false;
+      bar.classList.remove('indet');
+      bar.firstElementChild.style.width = Math.max(2, Math.min(100, t.percent)) + '%';
+    } else {
+      sub.textContent = '传输中 · ' + elapsedText(t.startedAt);
+      pct.hidden = true;
+      bar.hidden = false;
+      bar.classList.add('indet');
+      bar.firstElementChild.style.width = '';
+    }
+  } else {
+    sub.textContent = t.detail || '';
+    pct.hidden = true;
+    bar.hidden = true;
+  }
 }
 
 async function poll(force) {

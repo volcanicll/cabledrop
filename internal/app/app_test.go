@@ -349,6 +349,168 @@ func TestNoteRoundTrip(t *testing.T) {
 	}
 }
 
+func TestPumpRefreshesOnTrackEvents(t *testing.T) {
+	a := New()
+	refreshes := make(chan struct{}, 100)
+	stop := make(chan struct{})
+	a.trackDevices = func(stop <-chan struct{}, onChange func()) error {
+		onChange()
+		onChange()
+		onChange()
+		<-stop
+		return nil
+	}
+	done := make(chan struct{})
+	go func() { a.pump(func() { refreshes <- struct{}{} }, stop); close(done) }()
+
+	// The burst coalesces, but at least one refresh lands.
+	select {
+	case <-refreshes:
+	case <-time.After(time.Second):
+		t.Fatal("tracker event never triggered a refresh")
+	}
+	close(stop)
+	<-done
+}
+
+func TestPumpFallsBackToPollingWhenTrackerFails(t *testing.T) {
+	oldPoll := fallbackPoll
+	fallbackPoll = 15 * time.Millisecond
+	t.Cleanup(func() { fallbackPoll = oldPoll })
+
+	a := New()
+	a.trackDevices = func(stop <-chan struct{}, onChange func()) error {
+		return errors.New("adb track-devices 不可用")
+	}
+
+	refreshes := 0
+	var mu sync.Mutex
+	stop := make(chan struct{})
+	done := make(chan struct{})
+	go func() {
+		a.pump(func() {
+			mu.Lock()
+			refreshes++
+			mu.Unlock()
+		}, stop)
+		close(done)
+	}()
+
+	deadline := time.Now().Add(time.Second)
+	for time.Now().Before(deadline) {
+		mu.Lock()
+		n := refreshes
+		mu.Unlock()
+		if n >= 2 {
+			break
+		}
+		time.Sleep(2 * time.Millisecond)
+	}
+	mu.Lock()
+	n := refreshes
+	mu.Unlock()
+	if n < 2 {
+		t.Fatalf("refreshes = %d, want the fallback poll to fire repeatedly", n)
+	}
+	close(stop)
+	<-done
+}
+
+func TestPumpSkipsTheTimerWhileTheStreamIsHealthy(t *testing.T) {
+	oldPoll := fallbackPoll
+	fallbackPoll = 15 * time.Millisecond
+	t.Cleanup(func() { fallbackPoll = oldPoll })
+
+	a := New()
+	stop := make(chan struct{})
+	a.trackDevices = func(stop <-chan struct{}, onChange func()) error {
+		<-stop // healthy stream: runs until stopped, fires nothing
+		return nil
+	}
+	refreshes := 0
+	var mu sync.Mutex
+	done := make(chan struct{})
+	go func() {
+		a.pump(func() {
+			mu.Lock()
+			refreshes++
+			mu.Unlock()
+		}, stop)
+		close(done)
+	}()
+
+	time.Sleep(60 * time.Millisecond)
+	mu.Lock()
+	n := refreshes
+	mu.Unlock()
+	if n != 0 {
+		t.Fatalf("refreshes = %d while the stream was healthy, want 0", n)
+	}
+	close(stop)
+	<-done
+}
+
+func TestBatchPushReportsByteWeightedProgress(t *testing.T) {
+	a := New()
+	// The small file (25%) finishes immediately; the big one (75%) blocks on
+	// release until the test has read the mid-flight state.
+	release := make(chan struct{})
+	blocked := make(chan struct{})
+	a.pushFile = func(local, remoteDir string) (string, error) {
+		if strings.Contains(local, "small") {
+			return "/sdcard/Download/small.bin", nil
+		}
+		close(blocked)
+		<-release
+		return "/sdcard/Download/big.bin", nil
+	}
+	dir := t.TempDir()
+	big := filepath.Join(dir, "big.bin")
+	small := filepath.Join(dir, "small.bin")
+	os.WriteFile(big, make([]byte, 75), 0o644)
+	os.WriteFile(small, make([]byte, 25), 0o644)
+
+	a.PushFiles([]string{big, small}, "")
+	<-blocked
+	waitFor(t, func() bool {
+		st := a.State()
+		for _, tr := range st.Transfers {
+			if strings.HasSuffix(tr.Name, "small.bin") && tr.State == "done" {
+				return true
+			}
+		}
+		return false
+	})
+
+	// The still-running big row must show the batch's byte-weighted progress:
+	// the 25% file is done, so 25 — not an indeterminate bar, not 100.
+	var row model.Transfer
+	waitFor(t, func() bool {
+		st := a.State()
+		for _, tr := range st.Transfers {
+			if strings.HasSuffix(tr.Name, "big.bin") && tr.Percent != nil {
+				row = tr
+				return true
+			}
+		}
+		return false
+	})
+	if row.Percent == nil || *row.Percent < 24 || *row.Percent > 26 {
+		t.Fatalf("big row mid-flight = %+v, want percent ~25", row)
+	}
+
+	close(release)
+	waitFor(t, func() bool {
+		st := a.State()
+		for _, tr := range st.Transfers {
+			if strings.HasSuffix(tr.Name, "big.bin") {
+				return tr.State == "done" && tr.Percent != nil && *tr.Percent == 100
+			}
+		}
+		return false
+	})
+}
+
 // waitFor spins until cond is true — the transfer goroutines are real
 // goroutines, and the tests only need "eventually done", not a sleep.
 func waitFor(t *testing.T, cond func() bool) {

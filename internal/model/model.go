@@ -39,6 +39,18 @@ type Transfer struct {
 	State  string `json:"state"` // running | done | failed
 	Detail string `json:"detail"`
 	At     int64  `json:"at"`
+
+	// Progress fields, added after the first release and fully optional so
+	// every old client and every old record keeps working:
+	//
+	// Percent is 0..100 when the transfer's share of the work is actually
+	// known (a multi-file batch where each finished file's size is counted).
+	// Indeterminate marks "still moving, no percentage to show" — a single
+	// adb push or pull gives no stream progress, so the UI shows a moving
+	// bar and the elapsed time instead. StartedAt is unix millis.
+	Percent       *float64 `json:"percent,omitempty"`
+	Indeterminate bool     `json:"indeterminate,omitempty"`
+	StartedAt     int64    `json:"startedAt,omitempty"`
 }
 
 // State is everything the UI needs in one payload.

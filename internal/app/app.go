@@ -84,6 +84,8 @@ type App struct {
 	// fakes here; production leaves them nil and the device package is used.
 	pushFile func(local, remoteDir string) (string, error)
 	pullFile func(remote, localDir string) (string, error)
+	// trackDevices is the persistent device watcher; tests replace it.
+	trackDevices func(stop <-chan struct{}, onChange func()) error
 
 	// hiddenAt is when the panel last dismissed itself, in unix millis. The
 	// tray click handler needs it to tell "user clicked to close" apart from
@@ -173,18 +175,63 @@ func (a *App) Stop() {
 	a.StopServing()
 }
 
-// watch polls for the device. Two seconds keeps a plug-in feeling immediate
-// without spawning adb constantly.
+// fallbackPoll is the watch cadence when the track-devices stream is not
+// available — old adb, no adb yet, or a stream that keeps dropping. Variable,
+// so tests can speed it up.
+var fallbackPoll = 15 * time.Second
+
+// watch drives device detection.
+//
+// The preferred source is `adb track-devices`: one persistent connection that
+// pushes every plug/unplug, so changes are noticed immediately and an idle
+// system forks no adb at all — the old two-second poll spent a 19 MB process
+// spawn every two seconds for nothing. When the stream cannot run, the watcher
+// falls back to a low-frequency poll; when it can, the fallback timer ticks by
+// without doing anything.
 func (a *App) watch() {
-	t := time.NewTicker(2 * time.Second)
-	defer t.Stop()
 	a.refresh()
+	a.pump(a.refresh, a.stopWatch)
+}
+
+// pump multiplexes tracker events and the fallback timer into refresh calls.
+// It is split out from watch so tests can drive it with a counting refresh
+// and a fake tracker instead of real adb.
+func (a *App) pump(refresh func(), stop <-chan struct{}) {
+	changed := make(chan struct{}, 1)
+	trackerFailed := make(chan struct{})
+	go func() {
+		defer close(trackerFailed)
+		track := a.trackDevices
+		if track == nil {
+			track = device.Default.TrackDevices
+		}
+		if err := track(stop, func() {
+			// Coalesce bursts: one refresh per change is enough, and the
+			// channel send from multiple lines collapses into one.
+			select {
+			case changed <- struct{}{}:
+			default:
+			}
+		}); err != nil {
+			log.Printf("设备跟踪不可用，回退到低频轮询: %v", err)
+		}
+	}()
+
+	t := time.NewTicker(fallbackPoll)
+	defer t.Stop()
 	for {
 		select {
-		case <-a.stopWatch:
+		case <-stop:
 			return
+		case <-changed:
+			refresh()
 		case <-t.C:
-			a.refresh()
+			select {
+			case <-trackerFailed:
+				refresh()
+			default:
+				// The stream is healthy: nothing to poll for.
+			}
 		}
 	}
 }
@@ -531,6 +578,10 @@ func (a *App) addTransfer(name, kind string) string {
 	id := fmt.Sprintf("t%d", a.seq)
 	a.transfers = append([]model.Transfer{{
 		ID: id, Name: name, Kind: kind, State: "running", At: time.Now().Unix(),
+		// Indeterminate by default: a single adb push or pull exposes no
+		// stream progress, so the UI shows a moving bar plus elapsed time.
+		Indeterminate: true,
+		StartedAt:     time.Now().UnixMilli(),
 	}}, a.transfers...)
 	if len(a.transfers) > maxTransfers {
 		a.transfers = a.transfers[:maxTransfers]
@@ -545,6 +596,11 @@ func (a *App) finishTransfer(id, state, detail string) {
 		if a.transfers[i].ID == id {
 			a.transfers[i].State = state
 			a.transfers[i].Detail = detail
+			a.transfers[i].Indeterminate = false
+			if state == "done" {
+				pct := 100.0
+				a.transfers[i].Percent = &pct
+			}
 			if state == "failed" {
 				a.lastErr = detail
 			}
@@ -553,21 +609,72 @@ func (a *App) finishTransfer(id, state, detail string) {
 	}
 }
 
+// setTransferPercent records how far a multi-file batch has come. Unknown
+// sizes degrade silently: without a total there is no honest percentage and
+// the row stays indeterminate.
+func (a *App) setTransferPercent(id string, pct float64) {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	for i := range a.transfers {
+		if a.transfers[i].ID == id {
+			a.transfers[i].Indeterminate = false
+			p := pct
+			a.transfers[i].Percent = &p
+			return
+		}
+	}
+}
+
 // PushFiles sends local files to the phone, one transfer record each.
+//
+// A batch of known sizes shares one byte-weighted percentage: each finished
+// file bumps every still-running row by its own share, so the panel shows one
+// honest number for the drag instead of forty separate unknowns.
 func (a *App) PushFiles(paths []string, destDir string) {
 	push := a.pushFile
 	if push == nil {
 		push = device.PushFile
 	}
+
+	total := int64(0)
+	sizes := make(map[string]int64, len(paths))
+	for _, p := range paths {
+		if fi, err := os.Stat(p); err == nil && !fi.IsDir() {
+			sizes[p] = fi.Size()
+			total += fi.Size()
+		}
+	}
+	batch := len(paths) > 1 && total > 0
+	ids := make(map[string]string, len(paths))
+	idOf := func(p string) string { return ids[p] }
+	var done int64
+	var mu sync.Mutex
+	bump := func(justFinished string) {
+		if !batch {
+			return
+		}
+		mu.Lock()
+		done += sizes[justFinished]
+		pct := 100 * float64(done) / float64(total)
+		mu.Unlock()
+		for _, p := range paths {
+			if p != justFinished {
+				a.setTransferPercent(idOf(p), pct)
+			}
+		}
+	}
+
 	for _, p := range paths {
 		p := p
 		id := a.addTransfer(filepath.Base(p), "push")
+		ids[p] = id
 		go func() {
 			remote, err := push(p, destDir)
 			if err != nil {
 				a.finishTransfer(id, "failed", err.Error())
 				return
 			}
+			bump(p)
 			// The full device path is noise in an 11px line; the folder is
 			// what the user actually wants to know.
 			a.finishTransfer(id, "done", "已发送到手机 "+filepath.Base(filepath.Dir(remote)))

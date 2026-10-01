@@ -7,6 +7,7 @@
 package device
 
 import (
+	"bufio"
 	"bytes"
 	"context"
 	"errors"
@@ -271,4 +272,96 @@ func (a *ADB) Shell(timeout time.Duration, cmd string) (string, error) {
 		return out, errors.New(msg)
 	}
 	return out, nil
+}
+
+// TrackDevices keeps a persistent `adb track-devices` connection and calls
+// onChange every time the device list changes (coalescing is the caller's
+// job — one change may emit several lines).
+//
+// This is how the watcher avoids forking adb on a timer: the stream pushes
+// each plug/unplug over one connection, so a change is noticed immediately
+// and idle costs nothing. A dropped stream is retried with a short backoff
+// until stop is closed; an error return means the stream could not be started
+// at all — no adb binary, or one too old to know track-devices — and the
+// caller should fall back to polling.
+func (a *ADB) TrackDevices(stop <-chan struct{}, onChange func()) error {
+	if a.Path() == "" {
+		return ErrNoADB
+	}
+
+	for attempt := 0; ; attempt++ {
+		bin := a.Path()
+		ctx, cancel := context.WithCancel(context.Background())
+		cmd := exec.CommandContext(ctx, bin, "track-devices")
+		// Same env widening as Run: Android Studio's adb needs its DLLs.
+		cmd.Env = append(os.Environ(), "PATH="+prependPath(filepath.Dir(bin)))
+		stdout, err := cmd.StdoutPipe()
+		if err != nil {
+			cancel()
+			return err
+		}
+		if err := cmd.Start(); err != nil {
+			cancel()
+			// An adb without track-devices fails instantly on every attempt;
+			// only the first start error is reported so the caller can poll.
+			if attempt == 0 {
+				return err
+			}
+		} else {
+			go func() {
+				select {
+				case <-stop:
+					cancel()
+				case <-ctx.Done():
+				}
+			}()
+
+			sawOutput := false
+			sc := bufio.NewScanner(stdout)
+			for sc.Scan() {
+				line := strings.TrimSpace(sc.Text())
+				if trackLineMeansChange(line) {
+					sawOutput = true
+					onChange()
+				}
+			}
+			_ = cmd.Wait()
+			cancel()
+
+			select {
+			case <-stop:
+				return nil
+			default:
+			}
+			// A first attempt that produced nothing and failed usually means
+			// an adb without track-devices support. Report it once so the
+			// caller polls instead of waiting on a dead stream.
+			if attempt == 0 && !sawOutput {
+				return errors.New("adb track-devices 不可用")
+			}
+		}
+
+		// Stream dropped (adb server restarted, USB stack hiccup): retry.
+		select {
+		case <-stop:
+			return nil
+		case <-time.After(2 * time.Second):
+		}
+	}
+}
+
+// trackLineMeansChange decides whether one line of track-devices output is a
+// device-list change worth a refresh: the "List of devices attached" header
+// and every "<serial>\t<state>" line are; daemon chatter and blanks are not.
+//
+// Firing on the header matters: an unplug re-prints the header alone, and
+// that is the only signal the last device went away.
+func trackLineMeansChange(line string) bool {
+	if line == "" {
+		return false
+	}
+	if strings.Contains(line, "daemon") {
+		return false
+	}
+	return true
 }

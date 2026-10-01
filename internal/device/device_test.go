@@ -2,7 +2,11 @@ package device
 
 import (
 	"errors"
+	"os"
+	"runtime"
+	"path/filepath"
 	"strings"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -208,4 +212,90 @@ func TestADBWithoutBinaryFailsFast(t *testing.T) {
 	if _, _, _, err := f.Run(time.Second, "devices"); !errors.Is(err, ErrNoADB) {
 		t.Fatalf("err = %v, want ErrNoADB", err)
 	}
+}
+
+// TrackDevices is the one operation that needs a real process (it reads a
+// pipe), so it runs against a shell script standing in for adb.
+func TestTrackDevicesFiresOnEachBlock(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("stands in for adb with a POSIX shell script")
+	}
+	dir := t.TempDir()
+	script := filepath.Join(dir, "adb")
+	code := `#!/bin/sh
+if [ "$1" != "track-devices" ]; then
+  echo "unexpected: $1" >&2; exit 9
+fi
+echo "List of devices attached"
+echo "SERIAL1	device"
+# exec so the killed process is the sleeper itself: a plain sleep child
+# would inherit the stdout pipe and outlive the kill.
+exec sleep 30
+`
+	if err := os.WriteFile(script, []byte(code), 0o755); err != nil {
+		t.Fatal(err)
+	}
+
+	f := &ADB{path: script, looked: true}
+	stop := make(chan struct{})
+	var changes int32
+	done := make(chan error, 1)
+	go func() { done <- f.TrackDevices(stop, func() { atomic.AddInt32(&changes, 1) }) }()
+
+	waitForCond(t, func() bool { return atomic.LoadInt32(&changes) >= 1 }, time.Second)
+	close(stop)
+	select {
+	case err := <-done:
+		if err != nil {
+			t.Fatalf("TrackDevices = %v", err)
+		}
+	case <-time.After(2 * time.Second):
+		t.Fatal("TrackDevices did not stop")
+	}
+}
+
+// An adb too old for track-devices prints nothing and exits: the watcher must
+// hear about it once, so it can poll instead.
+func TestTrackDevicesReportsUnsupportedBinary(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("stands in for adb with a POSIX shell script")
+	}
+	dir := t.TempDir()
+	script := filepath.Join(dir, "adb")
+	if err := os.WriteFile(script, []byte("#!/bin/sh\necho \"unknown command\" >&2\nexit 1\n"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+
+	f := &ADB{path: script, looked: true}
+	err := f.TrackDevices(make(chan struct{}), func() {})
+	if err == nil {
+		t.Fatal("expected an error from an adb without track-devices")
+	}
+}
+
+func TestTrackLineMeansChange(t *testing.T) {
+	yes := []string{"List of devices attached", "SERIAL1\tdevice", "SERIAL2\tunauthorized"}
+	no := []string{"", "* daemon not running; starting now at tcp:5037", "* daemon started successfully"}
+	for _, line := range yes {
+		if !trackLineMeansChange(line) {
+			t.Errorf("trackLineMeansChange(%q) = false", line)
+		}
+	}
+	for _, line := range no {
+		if trackLineMeansChange(line) {
+			t.Errorf("trackLineMeansChange(%q) = true", line)
+		}
+	}
+}
+
+func waitForCond(t *testing.T, cond func() bool, within time.Duration) {
+	t.Helper()
+	deadline := time.Now().Add(within)
+	for time.Now().Before(deadline) {
+		if cond() {
+			return
+		}
+		time.Sleep(2 * time.Millisecond)
+	}
+	t.Fatal("condition not reached in time")
 }
