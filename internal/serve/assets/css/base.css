@@ -1,18 +1,24 @@
-/* Base element styles for both the desktop panel and the phone page. */
+/* Base element styles shared by the desktop panel and the phone page. */
 
 * { box-sizing: border-box; -webkit-user-select: none; user-select: none; }
 
 html, body {
   margin: 0;
   height: 100%;
-  font: 13px/1.5 -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC",
-        "Microsoft YaHei", sans-serif;
+  font: var(--fs-base)/1.6 -apple-system, BlinkMacSystemFont, "SF Pro Text",
+        "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif;
   color: var(--text);
   background: var(--bg);
   overflow: hidden;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
 }
 
-button { font: inherit; color: inherit; cursor: pointer; border: 0; background: none; }
+button {
+  font: inherit; color: inherit; cursor: pointer; border: 0; background: none;
+  padding: 0;
+  touch-action: manipulation;
+}
 button:disabled { cursor: default; }
 
 svg { display: block; }
@@ -20,34 +26,114 @@ svg { display: block; }
       stroke-linecap: round; stroke-linejoin: round; }
 .ic-lg { width: 22px; height: 22px; }
 
-.empty { padding: 18px 12px; text-align: center; color: var(--faint); font-size: 12px; }
+/* Keyboard focus is always visible; pointer clicks stay quiet. */
+:focus { outline: none; }
+:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px;
+                 border-radius: var(--r-sm); }
+
+/* ---------- shared primitives ---------- */
+
+/* Tinted chip behind an icon — the recurring brand shape. */
+.chip {
+  display: grid; place-items: center; flex: 0 0 auto;
+  border-radius: var(--r-md);
+  background: var(--accent-soft); color: var(--accent-text);
+  transition: background var(--t-fast) var(--ease), color var(--t-fast) var(--ease);
+}
+.chip.off { background: var(--surface-2); color: var(--text-3); }
+
+.btn {
+  display: inline-flex; align-items: center; justify-content: center; gap: 6px;
+  min-height: 34px;
+  padding: 0 14px;
+  border-radius: var(--r-md);
+  background: var(--accent); color: #fff; font-weight: 600; font-size: var(--fs-md);
+  transition: background var(--t-fast) var(--ease), transform var(--t-fast) var(--ease);
+}
+.btn:hover:not(:disabled) { background: var(--accent-text); }
+.btn:active:not(:disabled) { transform: scale(0.97); }
+.btn:disabled { opacity: 0.4; }
+.btn.ghost {
+  background: var(--surface); color: var(--text);
+  box-shadow: inset 0 0 0 1px var(--line-strong);
+}
+.btn.ghost:hover:not(:disabled) { background: var(--surface-2); }
+.btn.sm { min-height: 28px; padding: 0 10px; font-size: var(--fs-sm);
+          border-radius: var(--r-sm); }
+
+.link { color: var(--accent-text); font-size: var(--fs-sm); min-height: 28px;
+        padding: 0 2px; }
+.link:hover { text-decoration: underline; text-underline-offset: 2px; }
+
+.icon-btn {
+  width: 30px; height: 30px; display: grid; place-items: center;
+  border-radius: var(--r-sm); color: var(--text-2);
+  position: relative;
+  transition: background var(--t-fast) var(--ease), color var(--t-fast) var(--ease),
+              transform var(--t-fast) var(--ease);
+}
+/* The visible control is 30px; the hit target reaches 40px without
+   overlapping its neighbours. */
+.icon-btn::after {
+  content: ""; position: absolute; inset: -5px; border-radius: var(--r-sm);
+}
+.icon-btn:hover { background: var(--surface-2); color: var(--text); }
+.icon-btn:active { transform: scale(0.92); }
+.icon-btn.spin .ic { animation: spin 0.9s linear infinite; }
+@keyframes spin { to { transform: rotate(360deg); } }
+
+.empty {
+  padding: var(--s-5) var(--s-3);
+  text-align: center;
+  color: var(--text-3);
+  font-size: var(--fs-sm);
+}
+.empty .ic { width: 22px; height: 22px; margin: 0 auto var(--s-2); opacity: 0.7; }
+.empty-title { display: block; color: var(--text-2); font-size: var(--fs-md); }
+.empty-hint { display: block; margin-top: 3px; font-size: var(--fs-sm); }
 
 textarea {
   -webkit-user-select: text; user-select: text;
-  width: 100%; min-height: 118px; resize: vertical;
+  width: 100%; min-height: 116px; resize: vertical;
   padding: 10px 11px;
-  font: 12px/1.55 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
-  color: var(--text); background: var(--card);
-  border: 1px solid var(--line); border-radius: var(--radius);
-  outline: none;
+  font: var(--fs-md)/1.6 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  color: var(--text); background: var(--surface);
+  border-radius: var(--r-md);
+  box-shadow: inset 0 0 0 1px var(--line);
+  transition: box-shadow var(--t-fast) var(--ease);
 }
-textarea:focus { border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-soft); }
+textarea:focus { box-shadow: inset 0 0 0 1.5px var(--accent), 0 0 0 3px var(--accent-soft); }
 
-.btn-row { display: flex; gap: 8px; margin-top: 9px; }
-.btn {
-  flex: 1; display: flex; align-items: center; justify-content: center; gap: 6px;
-  padding: 9px 12px; border-radius: 9px;
-  background: var(--accent); color: #fff; font-weight: 600; font-size: 12.5px;
-  transition: filter .15s, transform .1s;
+.hint { color: var(--text-2); font-size: var(--fs-sm); margin-top: var(--s-2);
+        line-height: 1.65; }
+.hint code { font: 11px ui-monospace, Menlo, monospace; background: var(--surface-2);
+             padding: 1px 5px; border-radius: 4px;
+             -webkit-user-select: text; user-select: text; }
+
+/* Values the user may want to copy by hand. */
+.selectable, .selectable * { -webkit-user-select: text; user-select: text; }
+
+/* Skeleton shimmer: a gradient block sliding via transform only. */
+.skel {
+  position: relative; overflow: hidden;
+  border-radius: var(--r-sm);
+  background: var(--surface-2);
 }
-.btn:hover:not(:disabled) { filter: brightness(1.08); }
-.btn:active:not(:disabled) { transform: scale(.98); }
-.btn:disabled { opacity: .45; }
-.btn.ghost { background: var(--card); color: var(--text); border: 1px solid var(--line); }
-.btn.ghost:hover:not(:disabled) { background: var(--card-2); filter: none; }
-
-.hint { color: var(--muted); font-size: 11.5px; margin-top: 9px; line-height: 1.55; }
-.hint code { font: 11px ui-monospace, Menlo, monospace; background: var(--line);
-             padding: 1px 5px; border-radius: 4px; -webkit-user-select: text; user-select: text; }
+.skel::after {
+  content: ""; position: absolute; inset: 0;
+  transform: translateX(-100%);
+  background: linear-gradient(90deg, transparent,
+              color-mix(in srgb, var(--text) 6%, transparent), transparent);
+  animation: shimmer 1.4s ease-in-out infinite;
+}
+@keyframes shimmer { to { transform: translateX(100%); } }
 
 [hidden] { display: none !important; }
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}

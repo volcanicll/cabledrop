@@ -5,182 +5,213 @@
 
 .wrap { display: flex; flex-direction: column; height: 100%; }
 
-.scroll { flex: 1; overflow-y: auto; overscroll-behavior: contain; padding: 12px; }
+.scroll {
+  flex: 1; overflow-y: auto; overscroll-behavior: contain;
+  padding: var(--s-3);
+  scrollbar-gutter: stable;
+}
 .scroll::-webkit-scrollbar { width: 8px; }
-.scroll::-webkit-scrollbar-thumb { background: var(--line); border-radius: 4px; border: 2px solid transparent;
-                                   background-clip: content-box; }
-.scroll::-webkit-scrollbar-thumb:hover { background: var(--faint); background-clip: content-box; }
+.scroll::-webkit-scrollbar-thumb { background: var(--line-strong); border-radius: 4px;
+                                   border: 2px solid transparent; background-clip: content-box; }
+.scroll::-webkit-scrollbar-thumb:hover { background: var(--text-3); background-clip: content-box; }
 
-/* ---------- status header ---------- */
+/* ---------- top bar ---------- */
 
-.hero {
-  display: flex; align-items: center; gap: 11px;
-  padding: 12px 14px;
-  background: var(--card);
-  border-bottom: 1px solid var(--line);
+.topbar {
+  display: flex; align-items: center; gap: var(--s-2);
+  padding: var(--s-3) var(--s-3) var(--s-2);
   flex: 0 0 auto;
 }
-.hero-glyph {
-  width: 38px; height: 38px; flex: 0 0 auto;
-  display: grid; place-items: center;
-  border-radius: 10px;
-  background: var(--accent-soft); color: var(--accent);
-  transition: background .2s, color .2s;
-}
-.hero-glyph.off { background: var(--line); color: var(--faint); }
-.hero-text { flex: 1; min-width: 0; }
+.topbar .brand { width: 36px; height: 36px; }
+.status { flex: 1; min-width: 0; margin-left: 2px; }
 /* display:block matters: these are <span>s, and an inline box ignores
-   overflow/text-overflow, so the ellipsis rules below would be dead code and
-   long device names would spill past the panel instead of truncating. */
-.hero-title { display: block; font-weight: 600; font-size: 13.5px; letter-spacing: -.01em;
-              white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.hero-sub { display: block; color: var(--muted); font-size: 11.5px; margin-top: 1px;
-            white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.dot { display: inline-block; width: 6px; height: 6px; border-radius: 50%;
-       background: var(--faint); margin-right: 5px; vertical-align: 1px; }
-.dot.on { background: var(--ok); box-shadow: 0 0 0 3px color-mix(in srgb, var(--ok) 22%, transparent); }
+   overflow/text-overflow, so the ellipsis rules below would be dead code. */
+.status-name { display: block; font-weight: 600; font-size: var(--fs-lg); line-height: 1.35;
+               white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.status-sub { display: flex; align-items: center; color: var(--text-2); font-size: var(--fs-sm);
+              white-space: nowrap; overflow: hidden; }
+.dot { flex: 0 0 auto; width: 6px; height: 6px; border-radius: 50%;
+       background: var(--text-3); margin-right: 6px;
+       transition: background var(--t-med) var(--ease); }
+.dot.on { background: var(--ok);
+          box-shadow: 0 0 0 3px color-mix(in srgb, var(--ok) 22%, transparent); }
 .dot.err { background: var(--err); }
 
-.icon-btn {
-  width: 30px; height: 30px; flex: 0 0 auto; display: grid; place-items: center;
-  border-radius: 8px; color: var(--muted);
-  transition: background .15s, color .15s;
+/* ---------- skeleton ---------- */
+
+.skel-page { display: flex; flex-direction: column; gap: var(--s-2); }
+.skel-tile { height: 54px; border-radius: var(--r-lg); }
+.skel-group-label { height: 13px; width: 72px; margin-top: var(--s-3); }
+.skel-row { height: 46px; border-radius: var(--r-md); }
+
+/* ---------- error card ---------- */
+
+.error-card {
+  display: flex; align-items: flex-start; gap: var(--s-2);
+  padding: var(--s-2) var(--s-3);
+  margin-bottom: var(--s-3);
+  border-radius: var(--r-md);
+  background: var(--err-soft);
+  color: var(--err);
+  font-size: var(--fs-sm);
+  line-height: 1.55;
 }
-.icon-btn:hover { background: var(--bg); color: var(--text); }
-.icon-btn:active { transform: scale(.94); }
-.icon-btn.spin .ic { animation: spin .9s linear infinite; }
-@keyframes spin { to { transform: rotate(360deg); } }
+.error-card .ic { flex: 0 0 auto; width: 15px; height: 15px; margin-top: 2px; }
+.error-body { flex: 1; min-width: 0; word-break: break-word; }
+.error-card .btn { margin: -2px 0 -2px var(--s-1); color: var(--err); }
+
+/* ---------- view switching ---------- */
+
+.view.view-enter { animation: view-in var(--t-med) var(--ease); }
+@keyframes view-in {
+  from { opacity: 0; transform: translateY(6px); }
+}
 
 /* ---------- tiles ---------- */
 
-.tiles { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+.tiles { display: grid; grid-template-columns: 1fr 1fr; gap: var(--s-2); }
 
 .tile {
-  display: flex; align-items: center; gap: 10px;
-  padding: 11px 12px;
-  background: var(--card);
-  border: 1px solid var(--line);
-  border-radius: var(--radius);
+  display: flex; align-items: center; gap: var(--s-2);
+  min-height: 54px;
+  padding: var(--s-2) var(--s-3);
+  background: var(--surface);
+  border-radius: var(--r-lg);
+  box-shadow: var(--shadow-card);
   text-align: left;
-  transition: border-color .15s, background .15s, transform .1s;
-  /* Grid items default to min-width:auto, so a long single-line subtitle
-     stretches its column past the panel and the row is clipped at the edge
-     instead of ellipsising. */
+  transition: background var(--t-fast) var(--ease), transform var(--t-fast) var(--ease),
+              box-shadow var(--t-fast) var(--ease);
+  /* Grid items default to min-width:auto; a long subtitle would stretch the
+     column past the panel instead of ellipsising. */
   min-width: 0;
 }
-.tile:hover:not(:disabled) { border-color: color-mix(in srgb, var(--accent) 45%, var(--line));
-                             background: var(--card-2); }
-.tile:active:not(:disabled) { transform: scale(.975); }
-.tile:disabled { opacity: .42; }
-.tile-glyph { width: 30px; height: 30px; flex: 0 0 auto; display: grid; place-items: center;
-              border-radius: 9px; background: var(--accent-soft); color: var(--accent); }
-.tile.live .tile-glyph { background: color-mix(in srgb, var(--ok) 20%, transparent); color: var(--ok); }
-.tile-text { flex: 1 1 auto; min-width: 0; }
-.tile-title { display: block; font-weight: 600; font-size: 12.5px; letter-spacing: -.01em;
-              white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.tile-sub { display: block; color: var(--muted); font-size: 11px; white-space: nowrap;
-            overflow: hidden; text-overflow: ellipsis; }
-
-/* ---------- sections ---------- */
-
-.section { margin-top: 16px; }
-.section-head { display: flex; align-items: baseline; justify-content: space-between;
-                padding: 0 2px 6px; }
-/* first-child only: the label span; a .head-links container must not inherit
-   the label's uppercase styling down into its buttons. */
-.section-head > span:first-child { font-size: 11px; font-weight: 600; color: var(--muted);
-                       text-transform: uppercase; letter-spacing: .05em; }
-.head-links { display: flex; gap: 12px; align-items: baseline; }
-.link { color: var(--accent); font-size: 11.5px; }
-.link:hover { text-decoration: underline; }
-
-.card { background: var(--card); border: 1px solid var(--line); border-radius: var(--radius);
-        overflow: hidden; }
-
-.row { display: flex; align-items: center; gap: 9px; padding: 8px 11px;
-       border-bottom: 1px solid var(--line); }
-.row:last-child { border-bottom: 0; }
-.row-main { flex: 1; min-width: 0; }
-/* block, not inline — see the note on .hero-title. */
-.row-title { display: block; font-size: 12.5px; white-space: nowrap; overflow: hidden;
-             text-overflow: ellipsis; }
-.row-sub { display: block; color: var(--muted); font-size: 11px; white-space: nowrap;
-           overflow: hidden; text-overflow: ellipsis; }
-.row-meta { color: var(--faint); font-size: 11px; flex: 0 0 auto; }
-
-/* A footer keeps the panel from ending in dead space when there is nothing
-   to show, and is where the adb location goes when something is wrong. */
-.panel-foot {
-  flex: 0 0 auto;
-  display: flex; align-items: center; justify-content: space-between; gap: 8px;
-  padding: 7px 14px;
-  border-top: 1px solid var(--line);
-  background: var(--card);
-  color: var(--faint); font-size: 10.5px;
+@media (hover: hover) {
+  .tile:hover:not(:disabled) { background: var(--surface-2); }
 }
-.panel-foot span { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.tile:active:not(:disabled) { transform: scale(0.975); }
+.tile:disabled { opacity: 0.42; }
+.tile-glyph { width: 30px; height: 30px; border-radius: var(--r-md); }
+.tile.live .tile-glyph { background: var(--ok-soft); color: var(--ok); }
+.tile-text { flex: 1 1 auto; min-width: 0; }
+.tile-title { display: block; font-weight: 600; font-size: var(--fs-md); line-height: 1.4;
+              white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.tile-sub { display: block; color: var(--text-2); font-size: var(--fs-sm); line-height: 1.4;
+            font-variant-numeric: tabular-nums;
+            white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 
-/* ---------- sub-view header ---------- */
+/* ---------- groups ---------- */
 
-.subhead { display: flex; align-items: center; gap: 6px; padding: 10px 12px;
-           background: var(--card); border-bottom: 1px solid var(--line); flex: 0 0 auto; }
-.subhead .crumb { flex: 1; min-width: 0; font-size: 12px; color: var(--muted);
-                  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
-                  direction: rtl; text-align: left; }
-.back { display: flex; align-items: center; gap: 3px; color: var(--accent); font-size: 12.5px;
-        padding: 3px 6px 3px 2px; border-radius: 7px; }
-.back:hover { background: var(--bg); }
+.group { margin-top: var(--s-4); }
+.group-head {
+  display: flex; align-items: baseline; justify-content: space-between;
+  padding: 0 2px var(--s-1);
+}
+.group-head h2 {
+  margin: 0; font-size: var(--fs-sm); font-weight: 600; color: var(--text-2);
+  letter-spacing: 0.02em;
+}
+.head-links { display: flex; gap: var(--s-3); align-items: baseline; }
 
-/* ---------- text panel ---------- */
+.card {
+  background: var(--surface);
+  border-radius: var(--r-md);
+  box-shadow: var(--shadow-card);
+}
+
+.row { display: flex; align-items: center; gap: var(--s-2);
+       padding: var(--s-2) var(--s-3); min-height: 46px; }
+.bar-row { padding: var(--s-1) var(--s-2); min-height: 44px;
+           box-shadow: var(--shadow-card); }
+.row + .row, .row + .tx, .tx + .row, .tx + .tx { position: relative; }
+.row-main { flex: 1; min-width: 0; }
+/* block, not inline — see the note on .status-name. */
+.row-title { display: block; font-size: var(--fs-md); line-height: 1.45;
+             white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.row-sub { display: block; color: var(--text-2); font-size: var(--fs-sm); line-height: 1.45;
+           white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.dir-glyph { width: 26px; height: 26px; border-radius: var(--r-sm); }
+.dir-glyph .ic { width: 14px; height: 14px; }
+
+.back {
+  display: flex; align-items: center; gap: 2px;
+  color: var(--accent-text); font-size: var(--fs-md);
+  min-height: 30px; padding: 0 var(--s-1) 0 2px;
+  border-radius: var(--r-sm);
+  transition: background var(--t-fast) var(--ease);
+}
+.back:hover { background: var(--surface-2); }
+.sm-ic { width: 15px; height: 15px; flex: 0 0 auto; }
+.crumb { flex: 1; min-width: 0; font-size: var(--fs-sm); color: var(--text-2);
+         white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+         direction: rtl; text-align: left; }
+
+.btn-row { display: flex; gap: var(--s-2); margin-top: var(--s-2); }
+.btn-row .btn { flex: 1; }
 
 .note-box {
-  background: var(--card); border: 1px solid var(--line); border-radius: var(--radius);
-  padding: 10px 11px; font: 12px/1.5 ui-monospace, Menlo, monospace;
+  background: var(--surface); border-radius: var(--r-md);
+  box-shadow: var(--shadow-card);
+  padding: var(--s-2) var(--s-3);
+  font: var(--fs-md)/1.6 ui-monospace, Menlo, monospace;
   max-height: 130px; overflow: auto;
   white-space: pre-wrap; word-break: break-word;
-  -webkit-user-select: text; user-select: text;
-  margin-top: 8px;
+  margin-top: var(--s-1);
 }
 
 /* ---------- transfers ---------- */
 
-.tx { display: flex; align-items: center; gap: 9px; padding: 7px 11px;
-      border-bottom: 1px solid var(--line); }
-.tx:last-child { border-bottom: 0; }
+.tx {
+  display: flex; align-items: center; flex-wrap: wrap; gap: var(--s-2);
+  padding: var(--s-2) var(--s-3);
+  position: relative;
+}
+.tx-pct { flex: 0 0 auto; color: var(--accent-text); font-size: var(--fs-sm);
+          font-variant-numeric: tabular-nums; }
+.tx-bar { flex: 1 0 100%; height: 3px; border-radius: 2px; background: var(--surface-2);
+          overflow: hidden; margin-top: -4px; }
+.tx-bar i { display: block; height: 100%; width: 0; background: var(--accent);
+            border-radius: 2px;
+            transition: width var(--t-slow) var(--ease); }
+.tx-bar.indet i { width: 30%; animation: indet 1.1s ease-in-out infinite; }
+@keyframes indet { from { transform: translateX(-110%); } to { transform: translateX(410%); } }
+
+/* Hairline separators between list rows, drawn without per-row borders so
+   the incremental renderer can move rows freely. */
+.tx:not(:first-child)::before,
+#filesList .row:not(:first-child)::before {
+  content: ""; position: absolute; top: 0; left: var(--s-3); right: 0;
+  border-top: 1px solid var(--line);
+}
+.tx { position: relative; }
+#filesList .row { position: relative; }
+
 .tx-ic { width: 16px; height: 16px; flex: 0 0 auto; }
 .tx-ic.done { color: var(--ok); }
 .tx-ic.failed { color: var(--err); }
-.tx-ic.running { color: var(--muted); animation: spin 1.1s linear infinite; }
-
-/* ---------- error ---------- */
-
-.alert { display: flex; gap: 8px; align-items: flex-start; margin-top: 12px;
-         padding: 9px 11px; border-radius: var(--radius);
-         background: color-mix(in srgb, var(--err) 12%, transparent); color: var(--err);
-         font-size: 11.5px; }
-.alert .ic { flex: 0 0 auto; margin-top: 1px; width: 15px; height: 15px; }
+.tx-ic.running { color: var(--text-2); animation: spin 1.1s linear infinite; }
 
 /* ---------- drag & drop ---------- */
 
 .drop-overlay {
   position: fixed; inset: 0; z-index: 50;
   display: grid; place-items: center;
-  background: color-mix(in srgb, var(--accent) 12%, var(--bg));
-  border: 2px dashed var(--accent); border-radius: 10px;
-  font-weight: 600; color: var(--accent); font-size: 13px;
+  background: color-mix(in srgb, var(--accent) 10%, var(--bg));
+  border-radius: var(--r-lg);
+  font-weight: 600; color: var(--accent-text); font-size: var(--fs-base);
 }
 
-/* ---------- transfer progress (added with live progress) ---------- */
+/* ---------- footer ---------- */
 
-.tx-pct { flex: 0 0 auto; color: var(--accent); font-size: 11px;
-          font-variant-numeric: tabular-nums; }
-.tx-bar { flex: 1 0 100%; height: 3px; border-radius: 2px; background: var(--line);
-          overflow: hidden; margin: -3px 0 2px 25px; }
-.tx-bar i { display: block; height: 100%; width: 0; background: var(--accent);
-            transition: width .3s ease; }
-.tx-bar.indet i { width: 30%; animation: indet 1.1s ease-in-out infinite; }
-@keyframes indet { 0% { transform: translateX(-110%); } 100% { transform: translateX(410%); } }
-
-@media (prefers-reduced-motion: reduce) {
-  .tx-bar.indet i { animation: none; width: 100%; opacity: .4; }
+.foot {
+  flex: 0 0 auto;
+  display: flex; align-items: center; justify-content: space-between; gap: var(--s-2);
+  padding: var(--s-2) var(--s-3);
+  color: var(--text-3); font-size: var(--fs-xs);
 }
+.foot span { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+
+/* ---------- file list skeleton ---------- */
+
+.fs-skel { display: flex; flex-direction: column; gap: var(--s-1); padding: var(--s-2); }
+.fs-skel-row { height: 30px; }
+.row-meta { color: var(--text-3); font-size: var(--fs-sm); flex: 0 0 auto; }

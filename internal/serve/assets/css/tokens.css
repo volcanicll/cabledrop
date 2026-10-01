@@ -1,33 +1,77 @@
-/* Design tokens — shared by the desktop panel and the phone page.
-   Same palette in both, so the app feels like one product. */
+/* Design tokens — single source for both the desktop panel and the phone page.
+ *
+ * Palette: brand blue accent (#0a84ff family) on Apple-style neutrals. Dark
+ * mode steps luminance with near-black surfaces instead of drop shadows —
+ * on dark ground a shadow is invisible, a lighter surface is not.
+ * Values are hex/rgba rather than oklch(): the same files render in Wails'
+ * WebKitGTK on old Linux, where wide-gamut color functions are not reliable.
+ */
 
 :root {
-  --bg: #f4f4f6;
-  --card: #ffffff;
-  --card-2: #fbfbfd;
+  /* color — light */
+  --bg: #f5f5f7;
+  --surface: #ffffff;
+  --surface-2: #f9f9fb;
   --text: #1d1d1f;
-  --muted: #6e6e73;
-  --faint: #a1a1a6;
-  --line: #e4e4e8;
+  --text-2: #66666e;
+  --text-3: #a1a1a6;
+  --line: rgba(0, 0, 0, 0.09);
+  --line-strong: rgba(0, 0, 0, 0.16);
   --accent: #0a84ff;
-  --accent-soft: #0a84ff1f;
-  --ok: #30b04c;
-  --warn: #e08b00;
+  --accent-text: #0071e3;
+  --accent-soft: rgba(10, 132, 255, 0.11);
+  --ok: #2fa14c;
+  --ok-soft: rgba(47, 161, 76, 0.14);
+  --warn: #d2820a;
   --err: #e5484d;
-  --radius: 12px;
-  --radius-sm: 8px;
+  --err-soft: rgba(229, 72, 77, 0.1);
+  --shadow-card: 0 1px 2px rgba(0, 0, 0, 0.05);
+
+  /* type scale — 13px base, UI-dense */
+  --fs-xs: 10.5px;
+  --fs-sm: 11.5px;
+  --fs-md: 12.5px;
+  --fs-base: 13px;
+  --fs-lg: 14px;
+
+  /* spacing rhythm — 4px base */
+  --s-1: 4px;
+  --s-2: 8px;
+  --s-3: 12px;
+  --s-4: 16px;
+  --s-5: 20px;
+
+  /* radius scale */
+  --r-sm: 7px;
+  --r-md: 10px;
+  --r-lg: 13px;
+  --r-full: 99px;
+
+  /* motion — one deceleration curve everywhere */
+  --ease: cubic-bezier(0.16, 1, 0.3, 1);
+  --t-fast: 120ms;
+  --t-med: 180ms;
+  --t-slow: 240ms;
 }
 
 @media (prefers-color-scheme: dark) {
   :root {
-    --bg: #1c1c1e;
-    --card: #2c2c2e;
-    --card-2: #242426;
-    --text: #f2f2f7;
-    --muted: #9a9aa0;
-    --faint: #6e6e73;
-    --line: #3a3a3c;
+    --bg: #131315;
+    --surface: #1d1d20;
+    --surface-2: #242428;
+    --text: #f2f2f5;
+    --text-2: #a2a2ab;
+    --text-3: #6c6c74;
+    --line: rgba(255, 255, 255, 0.09);
+    --line-strong: rgba(255, 255, 255, 0.16);
     --accent: #0a84ff;
-    --accent-soft: #0a84ff2e;
+    --accent-text: #409cff;
+    --accent-soft: rgba(10, 132, 255, 0.2);
+    --ok: #43c263;
+    --ok-soft: rgba(67, 194, 99, 0.18);
+    --warn: #e8a23d;
+    --err: #ff6361;
+    --err-soft: rgba(255, 99, 97, 0.14);
+    --shadow-card: none;
   }
 }

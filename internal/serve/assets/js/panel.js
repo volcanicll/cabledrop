@@ -9,10 +9,18 @@ function shortPath(p) {
 /* ---------------- views ---------------- */
 
 const VIEWS = ['home', 'files', 'text'];
+let view = 'home';
 
 function show(v) {
+  if (v === view) return;
   view = v;
   VIEWS.forEach((name) => { $('v-' + name).hidden = name !== v; });
+  // One shared enter transition; the section simply appears when the user
+  // asks for reduced motion.
+  const el = $('v-' + v);
+  el.classList.remove('view-enter');
+  void el.offsetWidth; // restart the animation
+  el.classList.add('view-enter');
   $('scroll').scrollTop = 0;
 }
 
@@ -20,14 +28,18 @@ function show(v) {
 
 let St = null;
 let busy = false;
-let view = 'home';
 
 function render(s) {
+  const first = St === null;
   St = s;
+  if (first) {
+    document.body.classList.remove('is-loading');
+    $('skeleton').remove();
+  }
 
-  // header
+  // top bar
   const on = s.connected;
-  $('glyph').classList.toggle('off', !on);
+  document.querySelector('.topbar .brand').classList.toggle('off', !on);
   $('devName').textContent = !s.adbFound ? '找不到 adb'
     : on ? s.device : '未连接手机';
   $('devSub').innerHTML = !s.adbFound
@@ -50,18 +62,47 @@ function render(s) {
   // shared dir
   $('dirPath').textContent = shortPath(s.serveDir);
 
-  // transfers — patched incrementally: rebuilding this list every two
-  // seconds flickered and threw away the scroll position mid-read.
+  // transfers — patched incrementally, never rebuilt wholesale
   renderTransfers(s.transfers || []);
 
-  // error
-  $('errorBox').innerHTML = s.error
-    ? `<div class="alert"><svg class="ic"><use href="#i-alert"/></svg><span>${esc(s.error)}</span></div>`
-    : view === 'home' && !s.adbFound
-      ? `<div class="alert"><svg class="ic"><use href="#i-alert"/></svg><span>没有找到 adb。装一个 Android Studio，或 <code>brew install android-platform-tools</code>。</span></div>`
-      : '';
+  // error card
+  renderError(s);
 
-  $('footAdb').textContent = !s.adbFound ? '未找到 adb' : (s.connected ? '' : '等待设备');
+  $('footAdb').textContent = !s.adbFound ? '未找到 adb' : (on ? '' : '等待设备');
+}
+
+/* ---------------- error card ---------------- */
+
+function renderError(s) {
+  const box = $('errorBox');
+  let msg = s.error;
+
+  if (!msg && view === 'home' && !s.adbFound) {
+    msg = '没有找到 adb。装一个 Android Studio，或运行 brew install android-platform-tools。';
+  }
+  // Every card that appears here describes a state a refresh may clear, so
+  // each one carries the retry action.
+  const action = msg ? '重试' : null;
+
+  if (!msg) {
+    box.hidden = true;
+    box.innerHTML = '';
+    return;
+  }
+  box.hidden = false;
+  const next = `<div class="error-card" role="alert">
+    <svg class="ic"><use href="#i-alert"/></svg>
+    <span class="error-body">${esc(msg)}</span>
+    ${action ? `<button class="btn sm ghost" id="errorRetry">${action}</button>` : ''}
+  </div>`;
+  if (box.dataset.sig !== next) {
+    box.dataset.sig = next;
+    box.innerHTML = next;
+    const retry = $('errorRetry');
+    if (retry) retry.onclick = async () => {
+      try { render(await post('/api/refresh')); } catch (_) { /* next poll retries */ }
+    };
+  }
 }
 
 /* ---------------- transfers, incremental ---------------- */
@@ -84,7 +125,11 @@ function renderTransfers(tx) {
     for (const rec of txRows.values()) rec.el.remove();
     txRows.clear();
     if (!card.querySelector('.empty')) {
-      card.innerHTML = '<div class="empty">还没有传输记录</div>';
+      card.innerHTML = `<div class="empty">
+        <svg class="ic"><use href="#i-send"/></svg>
+        <span class="empty-title">还没有传输记录</span>
+        <span class="empty-hint">拖文件到面板，或点「发送文件」</span>
+      </div>`;
     }
     $('clearTx').hidden = true;
     return;
@@ -165,6 +210,8 @@ function patchTxRow(el, t) {
   }
 }
 
+/* ---------------- polling ---------------- */
+
 async function poll(force) {
   if (busy && !force) return;
   busy = true;
@@ -183,8 +230,12 @@ async function poll(force) {
 let curDir = '/sdcard';
 let curParent = '';
 
+function fileListSkeleton() {
+  return `<div class="fs-skel">${'<div class="skel fs-skel-row"></div>'.repeat(6)}</div>`;
+}
+
 async function loadFiles(dir) {
-  $('filesList').innerHTML = '<div class="empty">读取中…</div>';
+  $('filesList').innerHTML = fileListSkeleton();
   try {
     const d = await api('/api/device/files?path=' + encodeURIComponent(dir));
     curDir = d.path;
@@ -192,7 +243,10 @@ async function loadFiles(dir) {
     $('filesPath').textContent = shortPath(d.path);
     $('filesList').innerHTML = (d.entries && d.entries.length)
       ? d.entries.map(fileRow).join('')
-      : '<div class="empty">（空目录）</div>';
+      : `<div class="empty">
+           <svg class="ic"><use href="#i-folder"/></svg>
+           <span class="empty-title">（空目录）</span>
+         </div>`;
   } catch (e) {
     $('filesList').innerHTML = `<div class="empty">${esc(e.message)}</div>`;
   }
@@ -202,15 +256,15 @@ function fileRow(en) {
   const icon = en.dir ? 'i-folder' : 'i-doc';
   const action = en.dir ? '' : '<span class="row-meta">取回</span>';
   return `<div class="row" data-path="${esc(en.path)}" data-dir="${en.dir ? 1 : 0}">
-    <svg class="ic" style="width:16px;height:16px;color:${en.dir ? 'var(--accent)' : 'var(--muted)'}">
+    <svg class="ic sm-ic" style="color:${en.dir ? 'var(--accent-text)' : 'var(--text-3)'}">
       <use href="#${icon}"/></svg>
     <span class="row-main">
       <span class="row-title">${esc(en.name)}</span>
       <span class="row-sub">${en.dir ? '文件夹' : sizeText(en.size)}</span>
     </span>
     ${action}
-    <button class="icon-btn" data-del="${esc(en.path)}" title="删除" style="width:24px;height:24px">
-      <svg class="ic" style="width:14px;height:14px"><use href="#i-trash"/></svg>
+    <button class="icon-btn" data-del="${esc(en.path)}" title="删除" aria-label="删除 ${esc(en.name)}">
+      <svg class="ic sm-ic"><use href="#i-trash"/></svg>
     </button>
   </div>`;
 }
@@ -322,12 +376,35 @@ $('sendText').onclick = async () => {
   if (!text) return;
   await post('/api/note', { text });
   $('textHint').textContent = '已发送 · 现在在手机上打开网页即可复制';
-  $('textHint').style.color = 'var(--ok)';
   setTimeout(() => {
     $('textHint').textContent = '发送后，在手机网页顶部就能看到并复制。';
-    $('textHint').style.color = '';
   }, 3000);
 };
+
+/* ---------------- drag feedback ---------------- */
+
+// The window-level file drop is native (Wails hands us real paths); this is
+// only the visual acknowledgment for the moments the webview does see the
+// drag. A counter handles nested dragenter/dragleave pairs.
+let dragDepth = 0;
+const overlay = document.createElement('div');
+overlay.className = 'drop-overlay';
+overlay.textContent = '松开发送到手机';
+overlay.hidden = true;
+document.body.appendChild(overlay);
+
+addEventListener('dragenter', (ev) => {
+  ev.preventDefault();
+  if (++dragDepth === 1) overlay.hidden = false;
+});
+addEventListener('dragover', (ev) => ev.preventDefault());
+addEventListener('dragleave', () => {
+  if (--dragDepth <= 0) { dragDepth = 0; overlay.hidden = true; }
+});
+addEventListener('drop', () => {
+  dragDepth = 0;
+  overlay.hidden = true;
+});
 
 /* ---------------- boot ---------------- */
 
