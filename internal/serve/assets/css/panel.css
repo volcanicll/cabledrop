@@ -215,3 +215,25 @@
 .fs-skel { display: flex; flex-direction: column; gap: var(--s-1); padding: var(--s-2); }
 .fs-skel-row { height: 30px; }
 .row-meta { color: var(--text-3); font-size: var(--fs-sm); flex: 0 0 auto; }
+
+/* ---------- native vibrancy ---------- */
+
+/* When the build has the transparent webview (html.native-glass is injected
+   by the asset handler), the page paints a translucent tint and lets the
+   native frosted backdrop show through. Without it everything stays opaque
+   and these rules never apply. */
+html.native-glass, html.native-glass body.panel { background: transparent; }
+html.native-glass body.panel {
+  background: color-mix(in srgb, var(--bg) 74%, transparent);
+}
+html.native-glass .card,
+html.native-glass .tile {
+  background: color-mix(in srgb, var(--surface) 86%, transparent);
+}
+html.native-glass .tile:hover:not(:disabled) {
+  background: color-mix(in srgb, var(--surface-2) 88%, transparent);
+}
+html.native-glass textarea,
+html.native-glass .note-box {
+  background: color-mix(in srgb, var(--surface) 88%, transparent);
+}

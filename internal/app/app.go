@@ -388,12 +388,14 @@ func (a *App) TogglePanel() {
 }
 
 // PanelFocusLost dismisses the panel whenever it stops being the key window —
-// a click on the desktop, another app, anything. This is what makes the panel
-// behave like a menu instead of a stubborn always-on-top overlay.
+// a click on the desktop, another app, anything.
+//
+// The native HideOnFocusLost usually wins the race and the panel is already
+// gone by the time this runs; the grace timestamp is stamped anyway, because
+// the very tray click that stole focus must still read as "close it" a beat
+// later.
 func (a *App) PanelFocusLost() {
-	if !a.panelVisible() {
-		return
-	}
+	a.hiddenAt.Store(time.Now().UnixMilli())
 	a.hidePanel()
 }
 

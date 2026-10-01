@@ -21,6 +21,10 @@ TAGS     = production
 ifeq ($(shell uname -s),Darwin)
   export CGO_CFLAGS  = -mmacosx-version-min=12.0
   export CGO_LDFLAGS = -mmacosx-version-min=12.0
+  # Wails' private AppKit APIs: transparent webview + custom corner radius,
+  # so the panel can draw a tint over native vibrancy. Builds without the
+  # tag stay opaque and look as before.
+  TAGS += private_mac_apis
 endif
 
 # Older Linux distributions ship GTK 3 and WebKitGTK 4.1, not the GTK 4 /

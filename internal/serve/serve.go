@@ -8,6 +8,7 @@
 package serve
 
 import (
+	"bytes"
 	"embed"
 	"encoding/json"
 	"errors"
@@ -441,6 +442,13 @@ func staticHandler(fsys fs.FS, forPhone bool) http.Handler {
 		if err != nil {
 			http.Error(w, "页面缺失: "+err.Error(), http.StatusInternalServerError)
 			return
+		}
+		// When this build has the transparent webview, tell the page to draw
+		// a translucent tint over the native vibrancy instead of solid paint.
+		// Injected on <head> so the class lands before first paint.
+		if serve == "panel.html" && translucentChrome {
+			data = bytes.Replace(data, []byte("<head>"),
+				[]byte("<head><script>document.documentElement.classList.add('native-glass')</script>"), 1)
 		}
 		w.Header().Set("Content-Type", "text/html; charset=utf-8")
 		w.Header().Set("Cache-Control", "no-store")

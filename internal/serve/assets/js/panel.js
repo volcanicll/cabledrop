@@ -285,10 +285,7 @@ async function refreshClip() {
 const hidePanel = () => { post('/api/panel/hide').catch(() => { }); };
 
 $('panelClose').onclick = hidePanel;
-
-document.addEventListener('keydown', (ev) => {
-  if (ev.key === 'Escape' && St && St.native) hidePanel();
-});
+// Escape itself is handled natively (HideOnEscape) — no key handler here.
 
 $('openDir').onclick = async () => {
   try { await post('/api/shared/open'); } catch (e) { alert(e.message); }

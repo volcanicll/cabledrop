@@ -78,11 +78,39 @@ func Run(opts Options) error {
 		AlwaysOnTop:   true,
 		Hidden:        true,
 		DisableResize: true,
+		// Both hides are native now: Escape and focus loss dismiss the panel
+		// without a round trip through the page. The app still listens for
+		// blur separately — it needs the timestamp to keep the tray-click
+		// grace window honest.
+		HideOnEscape:    true,
+		HideOnFocusLost: true,
 		// Dropping files onto the panel hands us real filesystem paths, which
 		// a browser File object cannot provide.
 		EnableFileDrop: true,
 		Windows: application.WindowsWindow{
 			HiddenOnTaskbar: true,
+		},
+		Mac: application.MacWindow{
+			// A dedicated NSPanel: showing or clicking it must not activate
+			// the app or steal the current app's menu bar.
+			WindowClass: application.MacWindowClassPanel,
+			PanelPreferences: application.MacPanelPreferences{
+				NonActivating: true,
+				FloatingPanel: true,
+			},
+			// The panel appears wherever the user is, including over
+			// fullscreen apps, and never joins the cmd-` window cycle.
+			CollectionBehavior: application.MacWindowCollectionBehaviorCanJoinAllSpaces |
+				application.MacWindowCollectionBehaviorFullScreenAuxiliary |
+				application.MacWindowCollectionBehaviorStationary |
+				application.MacWindowCollectionBehaviorIgnoresCycle,
+			// Frosted vibrancy behind a tint the page draws itself
+			// (html.native-glass in panel.css). With the private-APIs build
+			// tag the webview is transparent; without it everything stays
+			// opaque and looks as before.
+			Backdrop:     application.MacBackdropTranslucent,
+			CornerType:   application.MacWindowCornerTypeRounded,
+			CornerRadius: 12,
 		},
 	})
 

@@ -290,11 +290,16 @@ func TestPanelFocusLostHides(t *testing.T) {
 	if p.Visible() {
 		t.Fatal("focus loss did not hide the panel")
 	}
-	// Hiding an already-hidden panel is a no-op.
-	hides := p.hides
+
+	// A native blur-hide usually wins the race, so focus loss on an
+	// already-hidden panel must STILL stamp the grace timestamp: the tray
+	// click that stole focus has to read as "close it" a beat later.
+	a.hidePanel()
+	stamp := a.hiddenAt.Load()
+	time.Sleep(2 * time.Millisecond)
 	a.PanelFocusLost()
-	if p.hides != hides {
-		t.Fatal("hidden panel was hidden again")
+	if a.hiddenAt.Load() == stamp {
+		t.Fatal("grace timestamp not refreshed on blur")
 	}
 }
 
