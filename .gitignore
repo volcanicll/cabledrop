@@ -1,0 +1,9 @@
+/usbbridge
+/ub-*
+/USBBridge.app
+/usbbridge.app
+/dist/
+/build/icons/
+/build/windows/*.syso
+rsrc_windows_*.syso
+.DS_Store

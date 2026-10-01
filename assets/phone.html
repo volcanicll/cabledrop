@@ -1,0 +1,79 @@
+<!doctype html>
+<html lang="zh">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="color-scheme" content="light dark">
+<title>USBBridge</title>
+<link rel="stylesheet" href="app.css">
+</head>
+<body class="phone">
+
+<!-- icon sprite first, so every <use> below resolves -->
+<svg width="0" height="0" style="position:absolute" aria-hidden="true">
+  <symbol id="i-copy" viewBox="0 0 24 24"><rect x="9" y="9" width="11" height="11" rx="2.2"/><path d="M5 15V6.2A1.7 1.7 0 0 1 6.7 4.5H15"/></symbol>
+  <symbol id="i-send" viewBox="0 0 24 24"><path d="M4.5 12 20 4.5 15.5 20l-3.6-6.3z"/><path d="M11.9 13.7 20 4.5"/></symbol>
+  <symbol id="i-doc" viewBox="0 0 24 24"><path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z"/><path d="M14 3v5h5"/></symbol>
+  <symbol id="i-folder" viewBox="0 0 24 24"><path d="M3 7.5A2 2 0 0 1 5 5.5h3.6a2 2 0 0 1 1.6.8l.9 1.2H19a2 2 0 0 1 2 2v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></symbol>
+  <symbol id="i-down" viewBox="0 0 24 24"><path d="M12 4v15"/><path d="M18 13l-6 6-6-6"/></symbol>
+  <symbol id="i-phone" viewBox="0 0 24 24"><rect x="6" y="2.5" width="12" height="19" rx="2.6"/><path d="M10.6 18.6h2.8"/></symbol>
+</svg>
+
+<header class="p-head">
+  <div class="p-head-row">
+    <span class="p-logo"><svg class="ic ic-lg" viewBox="0 0 24 24"><rect x="6" y="2.5" width="12" height="19" rx="2.6"/><path d="M10.6 18.6h2.8"/></svg></span>
+    <span>
+      <span class="p-title">USBBridge</span>
+      <span class="p-sub" id="sub">连接中…</span>
+    </span>
+  </div>
+</header>
+
+<main class="p-main">
+
+  <section class="p-card" id="noteCard" hidden>
+    <div class="p-label">电脑发来的内容</div>
+    <div class="p-note" id="noteText"></div>
+    <button class="btn" id="copyNote">
+      <svg class="ic" style="width:16px;height:16px"><use href="#i-copy"/></svg>复制到手机
+    </button>
+  </section>
+
+  <section class="p-card">
+    <div class="p-label">电脑剪贴板</div>
+    <div class="p-note" id="clipText">（空）</div>
+    <button class="btn" id="copyClip">
+      <svg class="ic" style="width:16px;height:16px"><use href="#i-copy"/></svg>复制到手机
+    </button>
+    <div class="hint">电脑上复制什么，这里就能取走什么。</div>
+  </section>
+
+  <section class="p-card">
+    <div class="p-label">发到电脑</div>
+    <textarea id="toMac" placeholder="粘贴或输入文本，发送后直接进电脑剪贴板"></textarea>
+    <button class="btn" id="sendMac">
+      <svg class="ic" style="width:16px;height:16px"><use href="#i-send"/></svg>发送到电脑
+    </button>
+  </section>
+
+  <section class="p-card">
+    <div class="p-label">传文件到电脑</div>
+    <div class="p-file">
+      <input type="file" id="fileInput" multiple>
+    </div>
+    <button class="btn" id="upload" disabled>上传</button>
+    <div class="p-progress" id="upProgress" hidden><div id="upBar"></div></div>
+  </section>
+
+  <section class="p-card">
+    <div class="p-label">电脑上的文件</div>
+    <div id="files" class="p-list"><div class="empty">读取中…</div></div>
+    <button class="btn ghost" id="reload" style="margin-top:8px">刷新列表</button>
+  </section>
+
+  <div class="p-foot">通过 USB 线连接 · 不经过网络</div>
+</main>
+
+<script src="phone.js"></script>
+</body>
+</html>

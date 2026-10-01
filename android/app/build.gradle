@@ -1,0 +1,32 @@
+plugins {
+    id 'com.android.application'
+}
+
+android {
+    namespace 'com.usbbridge.app'
+    compileSdk 36
+
+    defaultConfig {
+        applicationId 'com.usbbridge.app'
+        minSdk 24
+        targetSdk 36
+        versionCode 1
+        versionName '1.0'
+    }
+
+    buildTypes {
+        release {
+            // Nothing to shrink: the app is one activity against the
+            // framework WebView. Keep release builds cheap and unsigned.
+            minifyEnabled false
+        }
+    }
+
+    lint {
+        abortOnError false
+    }
+}
+
+// Deliberately no dependencies: everything used here ships with the platform
+// (android.webkit, android.app). That keeps the APK small and the build free
+// of AndroidX downloads.

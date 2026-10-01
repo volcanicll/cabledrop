@@ -1,0 +1,344 @@
+/* USBBridge — shared styles for both the desktop panel and the phone page.
+   Same design language in both, so the app feels like one product. */
+
+:root {
+  --bg: #f4f4f6;
+  --card: #ffffff;
+  --card-2: #fbfbfd;
+  --text: #1d1d1f;
+  --muted: #6e6e73;
+  --faint: #a1a1a6;
+  --line: #e4e4e8;
+  --accent: #0a84ff;
+  --accent-soft: #0a84ff1f;
+  --ok: #30b04c;
+  --warn: #e08b00;
+  --err: #e5484d;
+  --radius: 12px;
+  --radius-sm: 8px;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #1c1c1e;
+    --card: #2c2c2e;
+    --card-2: #242426;
+    --text: #f2f2f7;
+    --muted: #9a9aa0;
+    --faint: #6e6e73;
+    --line: #3a3a3c;
+    --accent: #0a84ff;
+    --accent-soft: #0a84ff2e;
+  }
+}
+
+* { box-sizing: border-box; -webkit-user-select: none; user-select: none; }
+
+html, body {
+  margin: 0;
+  height: 100%;
+  font: 13px/1.5 -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC",
+        "Microsoft YaHei", sans-serif;
+  color: var(--text);
+  background: var(--bg);
+  overflow: hidden;
+}
+
+button { font: inherit; color: inherit; cursor: pointer; border: 0; background: none; }
+button:disabled { cursor: default; }
+
+svg { display: block; }
+.ic { width: 18px; height: 18px; fill: none; stroke: currentColor; stroke-width: 1.8;
+      stroke-linecap: round; stroke-linejoin: round; }
+.ic-lg { width: 22px; height: 22px; }
+
+/* ---------- layout ---------- */
+
+.wrap { display: flex; flex-direction: column; height: 100%; }
+
+.scroll { flex: 1; overflow-y: auto; overscroll-behavior: contain; padding: 12px; }
+.scroll::-webkit-scrollbar { width: 8px; }
+.scroll::-webkit-scrollbar-thumb { background: var(--line); border-radius: 4px; border: 2px solid transparent;
+                                   background-clip: content-box; }
+.scroll::-webkit-scrollbar-thumb:hover { background: var(--faint); background-clip: content-box; }
+
+/* ---------- status header ---------- */
+
+.hero {
+  display: flex; align-items: center; gap: 11px;
+  padding: 12px 14px;
+  background: var(--card);
+  border-bottom: 1px solid var(--line);
+  flex: 0 0 auto;
+}
+.hero-glyph {
+  width: 38px; height: 38px; flex: 0 0 auto;
+  display: grid; place-items: center;
+  border-radius: 10px;
+  background: var(--accent-soft); color: var(--accent);
+  transition: background .2s, color .2s;
+}
+.hero-glyph.off { background: var(--line); color: var(--faint); }
+.hero-text { flex: 1; min-width: 0; }
+/* display:block matters: these are <span>s, and an inline box ignores
+   overflow/text-overflow, so the ellipsis rules below would be dead code and
+   long device names would spill past the panel instead of truncating. */
+.hero-title { display: block; font-weight: 600; font-size: 13.5px; letter-spacing: -.01em;
+              white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.hero-sub { display: block; color: var(--muted); font-size: 11.5px; margin-top: 1px;
+            white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.dot { display: inline-block; width: 6px; height: 6px; border-radius: 50%;
+       background: var(--faint); margin-right: 5px; vertical-align: 1px; }
+.dot.on { background: var(--ok); box-shadow: 0 0 0 3px color-mix(in srgb, var(--ok) 22%, transparent); }
+.dot.err { background: var(--err); }
+
+.icon-btn {
+  width: 30px; height: 30px; flex: 0 0 auto; display: grid; place-items: center;
+  border-radius: 8px; color: var(--muted);
+  transition: background .15s, color .15s;
+}
+.icon-btn:hover { background: var(--bg); color: var(--text); }
+.icon-btn:active { transform: scale(.94); }
+.icon-btn.spin .ic { animation: spin .9s linear infinite; }
+@keyframes spin { to { transform: rotate(360deg); } }
+
+/* ---------- tiles ---------- */
+
+.tiles { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+
+.tile {
+  display: flex; align-items: center; gap: 10px;
+  padding: 11px 12px;
+  background: var(--card);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  text-align: left;
+  transition: border-color .15s, background .15s, transform .1s;
+  /* Grid items default to min-width:auto, so a long single-line subtitle
+     stretches its column past the panel and the row is clipped at the edge
+     instead of ellipsising. */
+  min-width: 0;
+}
+.tile:hover:not(:disabled) { border-color: color-mix(in srgb, var(--accent) 45%, var(--line));
+                             background: var(--card-2); }
+.tile:active:not(:disabled) { transform: scale(.975); }
+.tile:disabled { opacity: .42; }
+.tile-glyph { width: 30px; height: 30px; flex: 0 0 auto; display: grid; place-items: center;
+              border-radius: 9px; background: var(--accent-soft); color: var(--accent); }
+.tile.live .tile-glyph { background: color-mix(in srgb, var(--ok) 20%, transparent); color: var(--ok); }
+.tile-text { flex: 1 1 auto; min-width: 0; }
+.tile-title { display: block; font-weight: 600; font-size: 12.5px; letter-spacing: -.01em;
+              white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.tile-sub { display: block; color: var(--muted); font-size: 11px; white-space: nowrap;
+            overflow: hidden; text-overflow: ellipsis; }
+
+/* ---------- sections ---------- */
+
+.section { margin-top: 16px; }
+.section-head { display: flex; align-items: baseline; justify-content: space-between;
+                padding: 0 2px 6px; }
+/* first-child only: the label span; a .head-links container must not inherit
+   the label's uppercase styling down into its buttons. */
+.section-head > span:first-child { font-size: 11px; font-weight: 600; color: var(--muted);
+                       text-transform: uppercase; letter-spacing: .05em; }
+.head-links { display: flex; gap: 12px; align-items: baseline; }
+.link { color: var(--accent); font-size: 11.5px; }
+.link:hover { text-decoration: underline; }
+
+.card { background: var(--card); border: 1px solid var(--line); border-radius: var(--radius);
+        overflow: hidden; }
+
+.row { display: flex; align-items: center; gap: 9px; padding: 8px 11px;
+       border-bottom: 1px solid var(--line); }
+.row:last-child { border-bottom: 0; }
+.row-main { flex: 1; min-width: 0; }
+/* block, not inline — see the note on .hero-title. */
+.row-title { display: block; font-size: 12.5px; white-space: nowrap; overflow: hidden;
+             text-overflow: ellipsis; }
+.row-sub { display: block; color: var(--muted); font-size: 11px; white-space: nowrap;
+           overflow: hidden; text-overflow: ellipsis; }
+.row-meta { color: var(--faint); font-size: 11px; flex: 0 0 auto; }
+
+.empty { padding: 18px 12px; text-align: center; color: var(--faint); font-size: 12px; }
+
+/* A footer keeps the panel from ending in dead space when there is nothing
+   to show, and is where the adb location goes when something is wrong. */
+.panel-foot {
+  flex: 0 0 auto;
+  display: flex; align-items: center; justify-content: space-between; gap: 8px;
+  padding: 7px 14px;
+  border-top: 1px solid var(--line);
+  background: var(--card);
+  color: var(--faint); font-size: 10.5px;
+}
+.panel-foot span { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+
+/* ---------- sub-view header ---------- */
+
+.subhead { display: flex; align-items: center; gap: 6px; padding: 10px 12px;
+           background: var(--card); border-bottom: 1px solid var(--line); flex: 0 0 auto; }
+.subhead .crumb { flex: 1; min-width: 0; font-size: 12px; color: var(--muted);
+                  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+                  direction: rtl; text-align: left; }
+.back { display: flex; align-items: center; gap: 3px; color: var(--accent); font-size: 12.5px;
+        padding: 3px 6px 3px 2px; border-radius: 7px; }
+.back:hover { background: var(--bg); }
+
+/* ---------- text panel ---------- */
+
+textarea {
+  -webkit-user-select: text; user-select: text;
+  width: 100%; min-height: 118px; resize: vertical;
+  padding: 10px 11px;
+  font: 12px/1.55 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  color: var(--text); background: var(--card);
+  border: 1px solid var(--line); border-radius: var(--radius);
+  outline: none;
+}
+textarea:focus { border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-soft); }
+
+.btn-row { display: flex; gap: 8px; margin-top: 9px; }
+.btn {
+  flex: 1; display: flex; align-items: center; justify-content: center; gap: 6px;
+  padding: 9px 12px; border-radius: 9px;
+  background: var(--accent); color: #fff; font-weight: 600; font-size: 12.5px;
+  transition: filter .15s, transform .1s;
+}
+.btn:hover:not(:disabled) { filter: brightness(1.08); }
+.btn:active:not(:disabled) { transform: scale(.98); }
+.btn:disabled { opacity: .45; }
+.btn.ghost { background: var(--card); color: var(--text); border: 1px solid var(--line); }
+.btn.ghost:hover:not(:disabled) { background: var(--card-2); filter: none; }
+
+.hint { color: var(--muted); font-size: 11.5px; margin-top: 9px; line-height: 1.55; }
+.hint code { font: 11px ui-monospace, Menlo, monospace; background: var(--line);
+             padding: 1px 5px; border-radius: 4px; -webkit-user-select: text; user-select: text; }
+
+.note-box {
+  background: var(--card); border: 1px solid var(--line); border-radius: var(--radius);
+  padding: 10px 11px; font: 12px/1.5 ui-monospace, Menlo, monospace;
+  max-height: 130px; overflow: auto;
+  white-space: pre-wrap; word-break: break-word;
+  -webkit-user-select: text; user-select: text;
+  margin-top: 8px;
+}
+
+/* ---------- transfers ---------- */
+
+.tx { display: flex; align-items: center; gap: 9px; padding: 7px 11px;
+      border-bottom: 1px solid var(--line); }
+.tx:last-child { border-bottom: 0; }
+.tx-ic { width: 16px; height: 16px; flex: 0 0 auto; }
+.tx-ic.done { color: var(--ok); }
+.tx-ic.failed { color: var(--err); }
+.tx-ic.running { color: var(--muted); animation: spin 1.1s linear infinite; }
+
+/* ---------- error ---------- */
+
+.alert { display: flex; gap: 8px; align-items: flex-start; margin-top: 12px;
+         padding: 9px 11px; border-radius: var(--radius);
+         background: color-mix(in srgb, var(--err) 12%, transparent); color: var(--err);
+         font-size: 11.5px; }
+.alert .ic { flex: 0 0 auto; margin-top: 1px; width: 15px; height: 15px; }
+
+/* ---------- drag & drop ---------- */
+
+.drop-overlay {
+  position: fixed; inset: 0; z-index: 50;
+  display: grid; place-items: center;
+  background: color-mix(in srgb, var(--accent) 12%, var(--bg));
+  border: 2px dashed var(--accent); border-radius: 10px;
+  font-weight: 600; color: var(--accent); font-size: 13px;
+}
+[hidden] { display: none !important; }
+
+/* ================= phone page =================
+   Reached over `adb reverse` at http://localhost:<port>. Same palette as the
+   panel, sized for a thumb: taller rows, real body scrolling, safe areas. */
+
+body.phone {
+  /* The page scrolls inside body, at exactly the viewport height. html keeps
+     overflow:hidden — the desktop panel depends on it — so with body at
+     height:auto long content used to overflow a viewport that could never
+     scroll: the bottom of a large clipboard or file list was simply out of
+     reach. Making body the scroll container fixes that and keeps the sticky
+     header working. */
+  height: 100%;
+  overflow-y: auto;
+  overscroll-behavior-y: contain;
+  -webkit-overflow-scrolling: touch;
+  background: var(--bg);
+}
+
+.p-head {
+  position: sticky; top: 0; z-index: 10;
+  padding: calc(12px + env(safe-area-inset-top)) 16px 11px;
+  background: color-mix(in srgb, var(--bg) 80%, transparent);
+  -webkit-backdrop-filter: saturate(180%) blur(18px);
+  backdrop-filter: saturate(180%) blur(18px);
+  border-bottom: 1px solid var(--line);
+}
+.p-head-row { display: flex; align-items: center; gap: 10px; }
+.p-logo {
+  width: 34px; height: 34px; display: grid; place-items: center; flex: 0 0 auto;
+  border-radius: 10px; background: var(--accent-soft); color: var(--accent);
+}
+.p-title { display: block; font-weight: 700; font-size: 15.5px; letter-spacing: -.015em; }
+.p-sub { display: block; color: var(--muted); font-size: 11.5px; margin-top: 1px; }
+
+.p-main { padding: 12px 14px calc(28px + env(safe-area-inset-bottom)); }
+
+.p-card {
+  background: var(--card);
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  padding: 13px 14px;
+  margin-bottom: 11px;
+}
+.p-label {
+  font-size: 11px; font-weight: 600; color: var(--muted);
+  text-transform: uppercase; letter-spacing: .05em;
+  margin-bottom: 8px;
+}
+
+.p-note {
+  font: 13px/1.6 ui-monospace, SFMono-Regular, Menlo, monospace;
+  background: var(--card-2);
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  padding: 10px 11px;
+  max-height: 190px; overflow: auto;
+  white-space: pre-wrap;
+  /* URLs have no spaces to break at; without this they run past the card. */
+  overflow-wrap: anywhere;
+  -webkit-user-select: text; user-select: text;
+  margin-bottom: 10px;
+}
+
+body.phone textarea { min-height: 96px; font-size: 13px; }
+body.phone .btn { padding: 12px 14px; border-radius: 11px; font-size: 14px; width: 100%; }
+body.phone .btn + .btn { margin-top: 8px; }
+body.phone .hint { font-size: 11.5px; }
+
+.p-list { display: flex; flex-direction: column; }
+.p-item {
+  display: flex; align-items: center; gap: 10px;
+  padding: 11px 2px;
+  border-bottom: 1px solid var(--line);
+  color: inherit; text-decoration: none;
+}
+.p-item:last-child { border-bottom: 0; }
+.p-item:active { opacity: .55; }
+.p-item-main { flex: 1; min-width: 0; }
+.p-item-title { display: block; font-size: 13.5px; white-space: nowrap;
+                overflow: hidden; text-overflow: ellipsis; }
+.p-item-sub { display: block; color: var(--muted); font-size: 11.5px; margin-top: 1px; }
+
+.p-file { margin-bottom: 10px; }
+.p-file input[type=file] { width: 100%; font-size: 12.5px; color: var(--muted); }
+.p-progress { height: 5px; border-radius: 3px; background: var(--line);
+              overflow: hidden; margin-top: 9px; }
+.p-progress > div { height: 100%; width: 0; background: var(--accent);
+                    transition: width .15s ease; }
+
+.p-foot { text-align: center; color: var(--faint); font-size: 11.5px; margin: 6px 0 4px; }

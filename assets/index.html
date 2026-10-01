@@ -1,0 +1,181 @@
+<!doctype html>
+<html lang="zh">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>USBBridge</title>
+<link rel="stylesheet" href="app.css">
+</head>
+<body>
+
+<!-- icon sprite: inline so there is nothing to load and nothing to bundle -->
+<svg width="0" height="0" style="position:absolute" aria-hidden="true">
+  <symbol id="i-phone" viewBox="0 0 24 24"><rect x="6" y="2.5" width="12" height="19" rx="2.6"/><path d="M10.6 18.6h2.8"/></symbol>
+  <symbol id="i-folder" viewBox="0 0 24 24"><path d="M3 7.5A2 2 0 0 1 5 5.5h3.6a2 2 0 0 1 1.6.8l.9 1.2H19a2 2 0 0 1 2 2v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></symbol>
+  <symbol id="i-doc" viewBox="0 0 24 24"><path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z"/><path d="M14 3v5h5"/></symbol>
+  <symbol id="i-up" viewBox="0 0 24 24"><path d="M12 20V5"/><path d="M6 11l6-6 6 6"/></symbol>
+  <symbol id="i-down" viewBox="0 0 24 24"><path d="M12 4v15"/><path d="M18 13l-6 6-6-6"/></symbol>
+  <symbol id="i-globe" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M3 12h18"/><path d="M12 3c2.6 3 2.6 15 0 18-2.6-3-2.6-15 0-18z"/></symbol>
+  <symbol id="i-text" viewBox="0 0 24 24"><rect x="4" y="4" width="16" height="16" rx="2.5"/><path d="M8 9h8M8 13h8M8 17h4"/></symbol>
+  <symbol id="i-refresh" viewBox="0 0 24 24"><path d="M20.5 12a8.5 8.5 0 1 1-2.5-6"/><path d="M20.5 3.5v5h-5"/></symbol>
+  <symbol id="i-chev" viewBox="0 0 24 24"><path d="M14.5 6 9 12l5.5 6"/></symbol>
+  <symbol id="i-alert" viewBox="0 0 24 24"><path d="M12 3.8 21 19.2H3z"/><path d="M12 10v4M12 17h.01"/></symbol>
+  <symbol id="i-x" viewBox="0 0 24 24"><path d="M6 6l12 12M18 6 6 18"/></symbol>
+  <symbol id="i-send" viewBox="0 0 24 24"><path d="M4.5 12 20 4.5 15.5 20l-3.6-6.3z"/><path d="M11.9 13.7 20 4.5"/></symbol>
+  <symbol id="i-copy" viewBox="0 0 24 24"><rect x="9" y="9" width="11" height="11" rx="2.2"/><path d="M5 15V6.2A1.7 1.7 0 0 1 6.7 4.5H15"/></symbol>
+  <symbol id="i-clip" viewBox="0 0 24 24"><rect x="8" y="3.5" width="8" height="4" rx="1.4"/><path d="M16 5.5h1.6A1.9 1.9 0 0 1 19.5 7.4v11.2a1.9 1.9 0 0 1-1.9 1.9H6.4a1.9 1.9 0 0 1-1.9-1.9V7.4A1.9 1.9 0 0 1 6.4 5.5H8"/></symbol>
+  <symbol id="i-check" viewBox="0 0 24 24"><path d="M4.5 12.5 10 18l9.5-11"/></symbol>
+  <symbol id="i-trash" viewBox="0 0 24 24"><path d="M4.5 7h15"/><path d="M9.5 7V5.2A1.2 1.2 0 0 1 10.7 4h2.6a1.2 1.2 0 0 1 1.2 1.2V7"/><path d="M6.5 7l.8 12a1.6 1.6 0 0 0 1.6 1.5h6.2a1.6 1.6 0 0 0 1.6-1.5L17.5 7"/></symbol>
+</svg>
+
+<div class="wrap">
+
+  <header class="hero">
+    <div class="hero-glyph off" id="glyph"><svg class="ic ic-lg"><use href="#i-phone"/></svg></div>
+    <div class="hero-text">
+      <div class="hero-title" id="devName">正在检测…</div>
+      <div class="hero-sub" id="devSub">插上 USB 线，手机选「传输文件」</div>
+    </div>
+    <button class="icon-btn" id="refresh" title="重新检测手机">
+      <svg class="ic"><use href="#i-refresh"/></svg>
+    </button>
+    <button class="icon-btn" id="panelClose" title="关闭面板（Esc，点击面板外也可关闭）">
+      <svg class="ic"><use href="#i-x"/></svg>
+    </button>
+  </header>
+
+  <div class="scroll" id="scroll">
+
+    <!-- ============ home ============ -->
+    <section id="v-home">
+      <div class="tiles">
+        <button class="tile" id="tFiles">
+          <span class="tile-glyph"><svg class="ic"><use href="#i-folder"/></svg></span>
+          <span class="tile-text">
+            <span class="tile-title">手机文件</span>
+            <span class="tile-sub">浏览并取回</span>
+          </span>
+        </button>
+
+        <button class="tile" id="tSend">
+          <span class="tile-glyph"><svg class="ic"><use href="#i-up"/></svg></span>
+          <span class="tile-text">
+            <span class="tile-title">发送文件</span>
+            <span class="tile-sub">或拖进来</span>
+          </span>
+        </button>
+
+        <button class="tile" id="tServe">
+          <span class="tile-glyph" id="serveGlyph"><svg class="ic"><use href="#i-globe"/></svg></span>
+          <span class="tile-text">
+            <span class="tile-title" id="serveTitle">手机网页</span>
+            <span class="tile-sub" id="serveSub">在手机上打开</span>
+          </span>
+        </button>
+
+        <button class="tile" id="tText">
+          <span class="tile-glyph"><svg class="ic"><use href="#i-clip"/></svg></span>
+          <span class="tile-text">
+            <span class="tile-title">剪贴板</span>
+            <span class="tile-sub">与手机互传</span>
+          </span>
+        </button>
+      </div>
+
+      <div class="section">
+        <div class="section-head">
+          <span>共享目录</span>
+          <span class="head-links">
+            <button class="link" id="openDir">打开</button>
+            <button class="link" id="changeDir">更改</button>
+          </span>
+        </div>
+        <div class="card">
+          <div class="row" id="dirRow">
+            <span class="tile-glyph" style="width:26px;height:26px;border-radius:7px">
+              <svg class="ic" style="width:15px;height:15px"><use href="#i-folder"/></svg>
+            </span>
+            <span class="row-main">
+              <span class="row-title" id="dirPath">—</span>
+              <span class="row-sub" id="dirHint">手机上传的文件会存到这里</span>
+            </span>
+          </div>
+        </div>
+      </div>
+
+      <div class="section">
+        <div class="section-head">
+          <span>最近传输</span>
+          <button class="link" id="clearTx" hidden>清除</button>
+        </div>
+        <div class="card" id="txCard"><div class="empty">还没有传输记录</div></div>
+      </div>
+
+      <div id="errorBox"></div>
+    </section>
+
+    <!-- ============ device files ============ -->
+    <section id="v-files" hidden>
+      <div class="card">
+        <div class="row" style="padding:7px 11px">
+          <button class="back" id="filesBack">
+            <svg class="ic" style="width:15px;height:15px"><use href="#i-chev"/></svg>返回
+          </button>
+          <span class="crumb" id="filesPath">/sdcard</span>
+          <button class="icon-btn" id="filesUp" title="上级目录" style="width:26px;height:26px">
+            <svg class="ic" style="width:15px;height:15px"><use href="#i-up"/></svg>
+          </button>
+        </div>
+      </div>
+      <div class="card" id="filesList" style="margin-top:8px">
+        <div class="empty">读取中…</div>
+      </div>
+      <div class="hint">点文件夹进入 · 点文件存到共享目录</div>
+    </section>
+
+    <!-- ============ text ============ -->
+    <section id="v-text" hidden>
+      <div class="card">
+        <div class="row" style="padding:7px 11px">
+          <button class="back" id="textBack">
+            <svg class="ic" style="width:15px;height:15px"><use href="#i-chev"/></svg>返回
+          </button>
+          <span class="crumb" style="direction:ltr">剪贴板与文本</span>
+        </div>
+      </div>
+
+      <div class="section" style="margin-top:12px">
+        <div class="section-head"><span>发到手机</span></div>
+        <textarea id="textOut" placeholder="在这里粘贴或输入文本，点「发送到手机」&#10;手机上打开网页后即可一键复制"></textarea>
+        <div class="btn-row">
+          <button class="btn ghost" id="useClip">
+            <svg class="ic" style="width:15px;height:15px"><use href="#i-clip"/></svg>用当前剪贴板
+          </button>
+          <button class="btn" id="sendText">
+            <svg class="ic" style="width:15px;height:15px"><use href="#i-send"/></svg>发送到手机
+          </button>
+        </div>
+        <div class="hint" id="textHint">发送后，在手机网页顶部就能看到并复制。</div>
+      </div>
+
+      <div class="section">
+        <div class="section-head">
+          <span>电脑剪贴板</span>
+          <button class="link" id="copyClip">复制</button>
+        </div>
+        <div class="note-box" id="clipView">（空）</div>
+        <div class="hint">手机网页会读到这段内容，点一下就能复制进手机。</div>
+      </div>
+    </section>
+
+  </div>
+
+  <footer class="panel-foot">
+    <span>通过 USB 连接 · 不经过网络</span>
+    <span id="footAdb"></span>
+  </footer>
+</div>
+
+<script src="app.js"></script>
+</body>
+</html>
