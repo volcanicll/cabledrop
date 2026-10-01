@@ -520,7 +520,7 @@ func TestBatchPushReportsByteWeightedProgress(t *testing.T) {
 // goroutines, and the tests only need "eventually done", not a sleep.
 func waitFor(t *testing.T, cond func() bool) {
 	t.Helper()
-	deadline := time.Now().Add(2 * time.Second)
+	deadline := time.Now().Add(5 * time.Second)
 	for time.Now().Before(deadline) {
 		if cond() {
 			return

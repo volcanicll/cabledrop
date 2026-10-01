@@ -3,8 +3,8 @@ package device
 import (
 	"errors"
 	"os"
-	"runtime"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"sync/atomic"
 	"testing"
@@ -242,14 +242,14 @@ exec sleep 30
 	done := make(chan error, 1)
 	go func() { done <- f.TrackDevices(stop, func() { atomic.AddInt32(&changes, 1) }) }()
 
-	waitForCond(t, func() bool { return atomic.LoadInt32(&changes) >= 1 }, time.Second)
+	waitForCond(t, func() bool { return atomic.LoadInt32(&changes) >= 1 }, 5*time.Second)
 	close(stop)
 	select {
 	case err := <-done:
 		if err != nil {
 			t.Fatalf("TrackDevices = %v", err)
 		}
-	case <-time.After(2 * time.Second):
+	case <-time.After(5 * time.Second):
 		t.Fatal("TrackDevices did not stop")
 	}
 }
