@@ -1,4 +1,4 @@
-// USBBridge — move data between a computer and an Android phone over a USB
+// CableDrop — move data between a computer and an Android phone over a USB
 // cable, with no network involved.
 //
 // The desktop side is a tray panel; the same embedded pages and the same JSON
@@ -53,7 +53,7 @@ func main() {
 	app := NewApp()
 
 	core := application.New(application.Options{
-		Name:        "USBBridge",
+		Name:        "CableDrop",
 		Description: "Move files and clipboard text between this computer and an Android phone over USB",
 		// The frontend is these embedded files: no build step, no bundled
 		// browser. The system webview renders them.
@@ -72,7 +72,7 @@ func main() {
 	app.core = core
 
 	panel := core.Window.NewWithOptions(application.WebviewWindowOptions{
-		Name:          "USBBridge",
+		Name:          "CableDrop",
 		Width:         380,
 		Height:        540,
 		Frameless:     true,
@@ -105,7 +105,7 @@ func main() {
 
 	tray := core.SystemTray.New()
 	tray.SetTemplateIcon(trayIcon(false))
-	tray.SetTooltip("USBBridge · 未连接手机")
+	tray.SetTooltip("CableDrop · 未连接手机")
 	tray.SetMenu(buildMenu(app, tray, panel))
 	// The window is attached for positioning under the icon, but the show/
 	// hide toggle is handled by togglePanel: Wails' own toggle cannot tell
@@ -154,7 +154,7 @@ func main() {
 func buildMenu(app *App, tray *application.SystemTray, panel *application.WebviewWindow) *application.Menu {
 	menu := application.Get().NewMenu()
 
-	menu.Add("USBBridge " + version).SetEnabled(false)
+	menu.Add("CableDrop " + version).SetEnabled(false)
 	menu.AddSeparator()
 
 	menu.Add("打开面板").OnClick(func(*application.Context) {

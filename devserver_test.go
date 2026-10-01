@@ -11,13 +11,13 @@ import (
 // and screenshotted in a browser while working on them. Skipped unless asked
 // for, so plain `go test ./...` is unaffected:
 //
-//	USBBRIDGE_DEVSERVER=1 go test -run TestDevServer -timeout 1h ./...
+//	CABLEDROP_DEVSERVER=1 go test -run TestDevServer -timeout 1h ./...
 //
 // Serves the phone page on http://127.0.0.1:18765/ and the panel on /panel.
 // No GUI, no tray, no adb: a bare App with the same handler both clients see.
 func TestDevServer(t *testing.T) {
-	if os.Getenv("USBBRIDGE_DEVSERVER") == "" {
-		t.Skip("set USBBRIDGE_DEVSERVER=1 to run the in-test dev server")
+	if os.Getenv("CABLEDROP_DEVSERVER") == "" {
+		t.Skip("set CABLEDROP_DEVSERVER=1 to run the in-test dev server")
 	}
 
 	a := NewApp()

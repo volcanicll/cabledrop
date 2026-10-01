@@ -1,4 +1,4 @@
-/* USBBridge — desktop panel.
+/* CableDrop — desktop panel.
  *
  * Talks to the same JSON API the phone page uses, over fetch. Keeping the
  * frontend free of generated bindings means there is no codegen step and the

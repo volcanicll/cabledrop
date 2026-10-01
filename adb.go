@@ -77,7 +77,7 @@ func findADB() string {
 	var candidates []string
 
 	// 1. Explicit override, for anyone whose setup is unusual.
-	if v := os.Getenv("USBBRIDGE_ADB"); v != "" {
+	if v := os.Getenv("CABLEDROP_ADB"); v != "" {
 		candidates = append(candidates, v)
 	}
 	// 2. Shipped next to the executable — the portable install.

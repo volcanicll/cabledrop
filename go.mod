@@ -1,4 +1,4 @@
-module github.com/volcanicll/usbbridge
+module github.com/volcanicll/cabledrop
 
 go 1.27.1
 

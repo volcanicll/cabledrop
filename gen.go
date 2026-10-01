@@ -7,7 +7,7 @@ import (
 )
 
 // generateIcons writes every icon a release needs, from the same drawing code
-// the tray uses. Invoked as `usbbridge --gen-icons <dir>` from the Makefile, so
+// the tray uses. Invoked as `cabledrop --gen-icons <dir>` from the Makefile, so
 // the artwork can never drift from what the app actually renders.
 func generateIcons(dir string) error {
 	if err := os.MkdirAll(dir, 0o755); err != nil {

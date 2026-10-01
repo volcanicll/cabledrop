@@ -1,4 +1,4 @@
-/* USBBridge — phone page.
+/* CableDrop — phone page.
  *
  * Reached at http://localhost:<port> on the device, tunnelled over the USB
  * cable by `adb reverse`. `localhost` counts as a secure context, which is

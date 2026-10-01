@@ -14,5 +14,5 @@ dependencyResolutionManagement {
     }
 }
 
-rootProject.name = 'USBBridge'
+rootProject.name = 'CableDrop'
 include ':app'

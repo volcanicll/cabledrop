@@ -3,11 +3,11 @@ plugins {
 }
 
 android {
-    namespace 'com.usbbridge.app'
+    namespace 'io.github.volcanicll.cabledrop'
     compileSdk 36
 
     defaultConfig {
-        applicationId 'com.usbbridge.app'
+        applicationId 'io.github.volcanicll.cabledrop'
         minSdk 24
         targetSdk 36
         versionCode 1

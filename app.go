@@ -111,7 +111,25 @@ func defaultServeDir() string {
 	if err != nil {
 		return "."
 	}
-	dir := filepath.Join(home, "USBBridge")
+	return resolveServeDir(home)
+}
+
+// resolveServeDir picks the shared folder under home, taking a pre-rename
+// install's ~/USBBridge along to the new name. The move happens once, only
+// when the new folder does not exist yet, and failing it (permissions, another
+// volume) is not fatal: a fresh folder is created instead and the old one is
+// left for the user to deal with by hand.
+func resolveServeDir(home string) string {
+	dir := filepath.Join(home, "CableDrop")
+	if _, err := os.Stat(dir); err == nil {
+		return dir
+	}
+	old := filepath.Join(home, "USBBridge")
+	if fi, err := os.Stat(old); err == nil && fi.IsDir() {
+		if os.Rename(old, dir) == nil {
+			return dir
+		}
+	}
 	if err := os.MkdirAll(dir, 0o755); err != nil {
 		return home
 	}
@@ -247,9 +265,9 @@ func (a *App) syncTray() {
 		return
 	}
 
-	tooltip := "USBBridge · 未连接手机"
+	tooltip := "CableDrop · 未连接手机"
 	if connected {
-		tooltip = "USBBridge · " + name
+		tooltip = "CableDrop · " + name
 	}
 	icon := trayIcon(connected)
 

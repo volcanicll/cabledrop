@@ -1,4 +1,4 @@
-# USBBridge — build and packaging.
+# CableDrop — build and packaging.
 #
 # The desktop UI links the platform's own webview, which on macOS and Linux
 # goes through cgo, so those two are built natively. Windows uses WebView2
@@ -6,8 +6,8 @@
 # In practice that means macOS and Windows releases are both produced on a
 # developer's Mac, and Linux needs a Linux machine.
 
-BINARY   = usbbridge
-APPNAME  = USBBridge
+BINARY   = cabledrop
+APPNAME  = CableDrop
 VERSION ?= $(shell git describe --tags --always --dirty 2>/dev/null || echo dev)
 WINVER   = $(shell echo $(VERSION) | sed -E 's/^v//; s/[^0-9.].*//')
 
@@ -76,14 +76,14 @@ icons:
 	@go run . --gen-icons build/icons
 	@mkdir -p build/windows
 	@cp build/icons/app-*.png build/windows/
-	@rm -rf build/darwin/usbbridge.iconset
-	@mkdir -p build/darwin/usbbridge.iconset
+	@rm -rf build/darwin/cabledrop.iconset
+	@mkdir -p build/darwin/cabledrop.iconset
 	@for s in 16 32 128 256 512; do \
-		cp build/icons/app-$$s.png       build/darwin/usbbridge.iconset/icon_$${s}x$${s}.png; \
-		cp build/icons/app-$$((s*2)).png build/darwin/usbbridge.iconset/icon_$${s}x$${s}@2x.png; \
+		cp build/icons/app-$$s.png       build/darwin/cabledrop.iconset/icon_$${s}x$${s}.png; \
+		cp build/icons/app-$$((s*2)).png build/darwin/cabledrop.iconset/icon_$${s}x$${s}@2x.png; \
 	done
-	@iconutil -c icns build/darwin/usbbridge.iconset -o build/darwin/AppIcon.icns
-	@rm -rf build/darwin/usbbridge.iconset
+	@iconutil -c icns build/darwin/cabledrop.iconset -o build/darwin/AppIcon.icns
+	@rm -rf build/darwin/cabledrop.iconset
 
 ## Android launcher icons, same artwork at every density.
 icons-android:
@@ -93,7 +93,7 @@ icons-android:
 ## gets over `adb reverse`. Needs the Android SDK (compileSdk 36 is what the
 ## project declares) and a JDK 17+. The build runs through the project's own
 ## gradle wrapper; the JDK comes from Android Studio's bundled JBR when
-## present. Output lands in dist/USBBridge.apk (debug-signed).
+## present. Output lands in dist/CableDrop.apk (debug-signed).
 SDK     ?= $(HOME)/Library/Android/sdk
 JBR     = /Applications/Android Studio.app/Contents/jbr/Contents/Home
 GRADLE_ENV = SDK_ROOT="$(SDK)"
@@ -107,8 +107,8 @@ apk: icons-android
 	@mkdir -p dist
 	@echo "sdk.dir=$(SDK)" > android/local.properties
 	cd android && $(GRADLE_ENV) ./gradlew assembleDebug --console=plain
-	@cp android/app/build/outputs/apk/debug/app-debug.apk dist/USBBridge.apk
-	@echo "  dist/USBBridge.apk"
+	@cp android/app/build/outputs/apk/debug/app-debug.apk dist/CableDrop.apk
+	@echo "  dist/CableDrop.apk"
 
 test:
 	go vet ./... && go test ./...
@@ -120,4 +120,4 @@ fmt:
 	gofmt -w .
 
 clean:
-	rm -rf $(BINARY) $(APPNAME).app usbbridge.app dist build/icons rsrc_windows_*.syso
+	rm -rf $(BINARY) $(APPNAME).app cabledrop.app dist build/icons rsrc_windows_*.syso

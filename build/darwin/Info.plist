@@ -2,10 +2,10 @@
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
 <dict>
-	<key>CFBundleName</key><string>USBBridge</string>
-	<key>CFBundleDisplayName</key><string>USBBridge</string>
-	<key>CFBundleIdentifier</key><string>ai.usbbridge.app</string>
-	<key>CFBundleExecutable</key><string>usbbridge</string>
+	<key>CFBundleName</key><string>CableDrop</string>
+	<key>CFBundleDisplayName</key><string>CableDrop</string>
+	<key>CFBundleIdentifier</key><string>io.github.volcanicll.cabledrop</string>
+	<key>CFBundleExecutable</key><string>cabledrop</string>
 	<key>CFBundleIconFile</key><string>AppIcon</string>
 	<key>CFBundlePackageType</key><string>APPL</string>
 	<key>CFBundleShortVersionString</key><string>@VERSION@</string>
@@ -17,6 +17,6 @@
 	<!-- The app reads the clipboard, so it must not be asked for permission
 	     to do so: pbpaste/pbcopy are what it shells out to, and those are the
 	     user's own session tools rather than a sandboxed pasteboard read. -->
-	<key>NSHumanReadableCopyright</key><string>USBBridge</string>
+	<key>NSHumanReadableCopyright</key><string>CableDrop</string>
 </dict>
 </plist>

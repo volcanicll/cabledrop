@@ -1,7 +1,6 @@
-/usbbridge
-/ub-*
-/USBBridge.app
-/usbbridge.app
+/cabledrop
+/CableDrop.app
+/cabledrop.app
 /dist/
 /build/icons/
 /build/windows/*.syso

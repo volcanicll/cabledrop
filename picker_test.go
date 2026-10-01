@@ -44,7 +44,7 @@ func TestRunPickerTreatsCancellationAsEmptyNotError(t *testing.T) {
 }
 
 func TestRunPickerReportsAMissingHelper(t *testing.T) {
-	_, err := runPicker("usbbridge-definitely-not-installed")
+	_, err := runPicker("cabledrop-definitely-not-installed")
 	if !errors.Is(err, errPickerUnavailable) {
 		t.Fatalf("got %v, want errPickerUnavailable", err)
 	}

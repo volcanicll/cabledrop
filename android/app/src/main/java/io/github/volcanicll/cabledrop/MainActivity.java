@@ -1,4 +1,4 @@
-package com.usbbridge.app;
+package io.github.volcanicll.cabledrop;
 
 import android.app.Activity;
 import android.app.DownloadManager;
@@ -36,7 +36,7 @@ import android.widget.Toast;
  */
 public class MainActivity extends Activity {
 
-    private static final String PREFS = "usbbridge";
+    private static final String PREFS = "cabledrop";
     private static final String PREF_PORT = "port";
     private static final int DEFAULT_PORT = 8765;
     private static final int FILE_CHOOSER = 1001;
@@ -157,13 +157,13 @@ public class MainActivity extends Activity {
         box.setBackgroundColor(0xFFF4F4F6);
 
         TextView title = new TextView(this);
-        title.setText("USBBridge 未连接");
+        title.setText("CableDrop 未连接");
         title.setTextSize(20);
         title.setTextColor(0xFF1D1D1F);
         title.setGravity(Gravity.CENTER);
 
         TextView body = new TextView(this);
-        body.setText("用 USB 线连接手机和电脑，电脑端打开 USBBridge\n并保持手机网页开启，然后点下面的重试。");
+        body.setText("用 USB 线连接手机和电脑，电脑端打开 CableDrop\n并保持手机网页开启，然后点下面的重试。");
         body.setTextSize(14);
         body.setLineSpacing(dp(3), 1f);
         body.setTextColor(0xFF6E6E73);

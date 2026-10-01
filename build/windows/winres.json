@@ -7,8 +7,8 @@
   "RT_MANIFEST": {
     "#1": {
       "0409": {
-        "identity": { "name": "ai.usbbridge.app", "version": "" },
-        "description": "USBBridge",
+        "identity": { "name": "io.github.volcanicll.cabledrop", "version": "" },
+        "description": "CableDrop",
         "minimum-os": "win10",
         "execution-level": "as invoker",
         "ui-access": false,
@@ -32,11 +32,11 @@
         "fixed": { "file_version": "0.0.0.0", "product_version": "0.0.0.0" },
         "info": {
           "0409": {
-            "CompanyName": "USBBridge",
-            "FileDescription": "USBBridge — 用 USB 线在电脑和手机之间传数据",
-            "LegalCopyright": "© 2026 USBBridge",
-            "OriginalFilename": "usbbridge.exe",
-            "ProductName": "USBBridge"
+            "CompanyName": "CableDrop",
+            "FileDescription": "CableDrop — 用 USB 线在电脑和手机之间传数据",
+            "LegalCopyright": "© 2026 CableDrop",
+            "OriginalFilename": "cabledrop.exe",
+            "ProductName": "CableDrop"
           }
         }
       }

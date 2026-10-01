@@ -1,4 +1,4 @@
-# USBBridge
+# CableDrop
 
 用一根 USB 线在电脑和 Android 手机之间传数据、传文本。**全程不经过网络** —— 电脑的外网出口可以一直是关的。
 
@@ -12,7 +12,7 @@
 ## 怎么用
 
 1. USB 线插上，手机上把 USB 用途改成「传输文件」
-2. 电脑上点菜单栏的 USBBridge 图标 → 面板弹出
+2. 电脑上点菜单栏的 CableDrop 图标 → 面板弹出
 3. 手机上打开 `http://localhost:8765` —— 这就是手机端的完整界面；或者装 APK（见下文）
 
 手机端**不需要装任何东西**，网页和 APK 是同一个界面的两种打开方式。
@@ -25,7 +25,7 @@
 
 ## Android APK（可选）
 
-手机端除了浏览器，也可以装一个 858 KB 的 APK：`make apk` 产物在 `dist/USBBridge.apk`，传到手机安装即可。
+手机端除了浏览器，也可以装一个 858 KB 的 APK：`make apk` 产物在 `dist/CableDrop.apk`，传到手机安装即可。
 
 它就是一个 WebView 壳，打开的还是 `127.0.0.1:8765` 那个页面，额外做了三件浏览器做不到/做不好的事：
 
@@ -33,7 +33,7 @@
 - 下载文件自动进系统「下载」应用，中文文件名正常
 - 连不上时给出明确提示和端口设置，而不是白屏
 
-APK 不捆绑任何服务端 —— 它仍然依赖电脑端的 USBBridge 通过 `adb reverse` 建隧道，所以**插着 USB 线才能用**，和网页一样不经过网络。
+APK 不捆绑任何服务端 —— 它仍然依赖电脑端的 CableDrop 通过 `adb reverse` 建隧道，所以**插着 USB 线才能用**，和网页一样不经过网络。
 
 构建需要 Android SDK（compileSdk 36）和 JDK 17+：
 
@@ -90,7 +90,7 @@ make icons     # 重新生成图标（含 `make icons-android` 出 APK 启动图
 
 程序不捆绑 adb，会按顺序找：
 
-1. 环境变量 `USBBRIDGE_ADB`
+1. 环境变量 `CABLEDROP_ADB`
 2. 程序同目录 / 同目录下的 `platform-tools/`
 3. Android Studio 的 SDK 路径
 4. `PATH`
