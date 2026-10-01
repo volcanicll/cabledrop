@@ -1,8 +1,10 @@
-package main
+package device
 
 import (
 	"errors"
 	"testing"
+
+	"github.com/volcanicll/cabledrop/internal/model"
 )
 
 func TestCheckDevicePath(t *testing.T) {
@@ -36,7 +38,7 @@ func TestCheckDevicePath(t *testing.T) {
 	}
 	for _, p := range bad {
 		err := CheckDevicePath(p)
-		if !errors.Is(err, ErrBadDevicePath) {
+		if !errors.Is(err, model.ErrBadDevicePath) {
 			t.Errorf("CheckDevicePath(%q) = %v, want ErrBadDevicePath", p, err)
 		}
 	}

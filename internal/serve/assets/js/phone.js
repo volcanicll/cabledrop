@@ -4,36 +4,8 @@
  * cable by `adb reverse`. `localhost` counts as a secure context, which is
  * what makes navigator.clipboard available here — the reason the clipboard is
  * handed over through this page instead of written by adb, which Android 10
- * and later forbid.
+ * and later forbid. Uses the shared helpers in api.js.
  */
-
-const $ = (id) => document.getElementById(id);
-
-async function api(path, opts) {
-  const res = await fetch(path, Object.assign({ cache: 'no-store' }, opts));
-  const raw = await res.text();
-  let data = null;
-  try { data = raw ? JSON.parse(raw) : null; } catch (_) { /* non-JSON body */ }
-  if (!res.ok) throw new Error((data && data.error) || `HTTP ${res.status}`);
-  return data;
-}
-
-const post = (path, body) => api(path, {
-  method: 'POST',
-  headers: { 'Content-Type': 'application/json' },
-  body: JSON.stringify(body || {}),
-});
-
-const esc = (s) => String(s == null ? '' : s).replace(/[&<>"']/g,
-  (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
-
-function sizeText(n) {
-  if (!n) return '';
-  const u = ['B', 'KB', 'MB', 'GB', 'TB'];
-  let i = 0;
-  while (n >= 1024 && i < u.length - 1) { n /= 1024; i++; }
-  return (i === 0 ? n : n.toFixed(n < 10 ? 1 : 0)) + ' ' + u[i];
-}
 
 /* Copying needs a user gesture on iOS and some Android browsers, so every
  * copy goes through a real tap rather than happening on load. The button's own

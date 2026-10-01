@@ -1,0 +1,33 @@
+/* Design tokens — shared by the desktop panel and the phone page.
+   Same palette in both, so the app feels like one product. */
+
+:root {
+  --bg: #f4f4f6;
+  --card: #ffffff;
+  --card-2: #fbfbfd;
+  --text: #1d1d1f;
+  --muted: #6e6e73;
+  --faint: #a1a1a6;
+  --line: #e4e4e8;
+  --accent: #0a84ff;
+  --accent-soft: #0a84ff1f;
+  --ok: #30b04c;
+  --warn: #e08b00;
+  --err: #e5484d;
+  --radius: 12px;
+  --radius-sm: 8px;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #1c1c1e;
+    --card: #2c2c2e;
+    --card-2: #242426;
+    --text: #f2f2f7;
+    --muted: #9a9aa0;
+    --faint: #6e6e73;
+    --line: #3a3a3c;
+    --accent: #0a84ff;
+    --accent-soft: #0a84ff2e;
+  }
+}

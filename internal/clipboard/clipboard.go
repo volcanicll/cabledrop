@@ -1,4 +1,4 @@
-package main
+package clipboard
 
 import (
 	"os/exec"
@@ -28,7 +28,7 @@ type Clipboard struct {
 	onChange func(string)
 }
 
-func NewClipboard() *Clipboard {
+func New() *Clipboard {
 	return &Clipboard{}
 }
 

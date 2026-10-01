@@ -1,10 +1,13 @@
-package main
+package serve_test
 
 import (
 	"net"
 	"os"
 	"testing"
 	"time"
+
+	"github.com/volcanicll/cabledrop/internal/app"
+	"github.com/volcanicll/cabledrop/internal/serve"
 )
 
 // TestDevServer keeps the real HTTP handler up so the pages can be inspected
@@ -20,14 +23,14 @@ func TestDevServer(t *testing.T) {
 		t.Skip("set CABLEDROP_DEVSERVER=1 to run the in-test dev server")
 	}
 
-	a := NewApp()
+	a := app.New()
 	ln, err := net.Listen("tcp", "127.0.0.1:18765")
 	if err != nil {
 		t.Fatal(err)
 	}
-	a.clip.Start()
+	a.StartClipboard()
 
-	srv := newHTTPServer(a, a.ServeDir(), true)
+	srv := serve.NewServer(a, true)
 	go func() {
 		_ = srv.Serve(ln)
 	}()

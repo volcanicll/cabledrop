@@ -1,56 +1,5 @@
-/* CableDrop — shared styles for both the desktop panel and the phone page.
-   Same design language in both, so the app feels like one product. */
-
-:root {
-  --bg: #f4f4f6;
-  --card: #ffffff;
-  --card-2: #fbfbfd;
-  --text: #1d1d1f;
-  --muted: #6e6e73;
-  --faint: #a1a1a6;
-  --line: #e4e4e8;
-  --accent: #0a84ff;
-  --accent-soft: #0a84ff1f;
-  --ok: #30b04c;
-  --warn: #e08b00;
-  --err: #e5484d;
-  --radius: 12px;
-  --radius-sm: 8px;
-}
-
-@media (prefers-color-scheme: dark) {
-  :root {
-    --bg: #1c1c1e;
-    --card: #2c2c2e;
-    --card-2: #242426;
-    --text: #f2f2f7;
-    --muted: #9a9aa0;
-    --faint: #6e6e73;
-    --line: #3a3a3c;
-    --accent: #0a84ff;
-    --accent-soft: #0a84ff2e;
-  }
-}
-
-* { box-sizing: border-box; -webkit-user-select: none; user-select: none; }
-
-html, body {
-  margin: 0;
-  height: 100%;
-  font: 13px/1.5 -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC",
-        "Microsoft YaHei", sans-serif;
-  color: var(--text);
-  background: var(--bg);
-  overflow: hidden;
-}
-
-button { font: inherit; color: inherit; cursor: pointer; border: 0; background: none; }
-button:disabled { cursor: default; }
-
-svg { display: block; }
-.ic { width: 18px; height: 18px; fill: none; stroke: currentColor; stroke-width: 1.8;
-      stroke-linecap: round; stroke-linejoin: round; }
-.ic-lg { width: 22px; height: 22px; }
+/* Desktop panel styles. The panel window is 380×540; every width here is
+   chosen against that. */
 
 /* ---------- layout ---------- */
 
@@ -159,8 +108,6 @@ svg { display: block; }
            overflow: hidden; text-overflow: ellipsis; }
 .row-meta { color: var(--faint); font-size: 11px; flex: 0 0 auto; }
 
-.empty { padding: 18px 12px; text-align: center; color: var(--faint); font-size: 12px; }
-
 /* A footer keeps the panel from ending in dead space when there is nothing
    to show, and is where the adb location goes when something is wrong. */
 .panel-foot {
@@ -185,34 +132,6 @@ svg { display: block; }
 .back:hover { background: var(--bg); }
 
 /* ---------- text panel ---------- */
-
-textarea {
-  -webkit-user-select: text; user-select: text;
-  width: 100%; min-height: 118px; resize: vertical;
-  padding: 10px 11px;
-  font: 12px/1.55 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
-  color: var(--text); background: var(--card);
-  border: 1px solid var(--line); border-radius: var(--radius);
-  outline: none;
-}
-textarea:focus { border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-soft); }
-
-.btn-row { display: flex; gap: 8px; margin-top: 9px; }
-.btn {
-  flex: 1; display: flex; align-items: center; justify-content: center; gap: 6px;
-  padding: 9px 12px; border-radius: 9px;
-  background: var(--accent); color: #fff; font-weight: 600; font-size: 12.5px;
-  transition: filter .15s, transform .1s;
-}
-.btn:hover:not(:disabled) { filter: brightness(1.08); }
-.btn:active:not(:disabled) { transform: scale(.98); }
-.btn:disabled { opacity: .45; }
-.btn.ghost { background: var(--card); color: var(--text); border: 1px solid var(--line); }
-.btn.ghost:hover:not(:disabled) { background: var(--card-2); filter: none; }
-
-.hint { color: var(--muted); font-size: 11.5px; margin-top: 9px; line-height: 1.55; }
-.hint code { font: 11px ui-monospace, Menlo, monospace; background: var(--line);
-             padding: 1px 5px; border-radius: 4px; -webkit-user-select: text; user-select: text; }
 
 .note-box {
   background: var(--card); border: 1px solid var(--line); border-radius: var(--radius);
@@ -250,95 +169,3 @@ textarea:focus { border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent
   border: 2px dashed var(--accent); border-radius: 10px;
   font-weight: 600; color: var(--accent); font-size: 13px;
 }
-[hidden] { display: none !important; }
-
-/* ================= phone page =================
-   Reached over `adb reverse` at http://localhost:<port>. Same palette as the
-   panel, sized for a thumb: taller rows, real body scrolling, safe areas. */
-
-body.phone {
-  /* The page scrolls inside body, at exactly the viewport height. html keeps
-     overflow:hidden — the desktop panel depends on it — so with body at
-     height:auto long content used to overflow a viewport that could never
-     scroll: the bottom of a large clipboard or file list was simply out of
-     reach. Making body the scroll container fixes that and keeps the sticky
-     header working. */
-  height: 100%;
-  overflow-y: auto;
-  overscroll-behavior-y: contain;
-  -webkit-overflow-scrolling: touch;
-  background: var(--bg);
-}
-
-.p-head {
-  position: sticky; top: 0; z-index: 10;
-  padding: calc(12px + env(safe-area-inset-top)) 16px 11px;
-  background: color-mix(in srgb, var(--bg) 80%, transparent);
-  -webkit-backdrop-filter: saturate(180%) blur(18px);
-  backdrop-filter: saturate(180%) blur(18px);
-  border-bottom: 1px solid var(--line);
-}
-.p-head-row { display: flex; align-items: center; gap: 10px; }
-.p-logo {
-  width: 34px; height: 34px; display: grid; place-items: center; flex: 0 0 auto;
-  border-radius: 10px; background: var(--accent-soft); color: var(--accent);
-}
-.p-title { display: block; font-weight: 700; font-size: 15.5px; letter-spacing: -.015em; }
-.p-sub { display: block; color: var(--muted); font-size: 11.5px; margin-top: 1px; }
-
-.p-main { padding: 12px 14px calc(28px + env(safe-area-inset-bottom)); }
-
-.p-card {
-  background: var(--card);
-  border: 1px solid var(--line);
-  border-radius: 14px;
-  padding: 13px 14px;
-  margin-bottom: 11px;
-}
-.p-label {
-  font-size: 11px; font-weight: 600; color: var(--muted);
-  text-transform: uppercase; letter-spacing: .05em;
-  margin-bottom: 8px;
-}
-
-.p-note {
-  font: 13px/1.6 ui-monospace, SFMono-Regular, Menlo, monospace;
-  background: var(--card-2);
-  border: 1px solid var(--line);
-  border-radius: 10px;
-  padding: 10px 11px;
-  max-height: 190px; overflow: auto;
-  white-space: pre-wrap;
-  /* URLs have no spaces to break at; without this they run past the card. */
-  overflow-wrap: anywhere;
-  -webkit-user-select: text; user-select: text;
-  margin-bottom: 10px;
-}
-
-body.phone textarea { min-height: 96px; font-size: 13px; }
-body.phone .btn { padding: 12px 14px; border-radius: 11px; font-size: 14px; width: 100%; }
-body.phone .btn + .btn { margin-top: 8px; }
-body.phone .hint { font-size: 11.5px; }
-
-.p-list { display: flex; flex-direction: column; }
-.p-item {
-  display: flex; align-items: center; gap: 10px;
-  padding: 11px 2px;
-  border-bottom: 1px solid var(--line);
-  color: inherit; text-decoration: none;
-}
-.p-item:last-child { border-bottom: 0; }
-.p-item:active { opacity: .55; }
-.p-item-main { flex: 1; min-width: 0; }
-.p-item-title { display: block; font-size: 13.5px; white-space: nowrap;
-                overflow: hidden; text-overflow: ellipsis; }
-.p-item-sub { display: block; color: var(--muted); font-size: 11.5px; margin-top: 1px; }
-
-.p-file { margin-bottom: 10px; }
-.p-file input[type=file] { width: 100%; font-size: 12.5px; color: var(--muted); }
-.p-progress { height: 5px; border-radius: 3px; background: var(--line);
-              overflow: hidden; margin-top: 9px; }
-.p-progress > div { height: 100%; width: 0; background: var(--accent);
-                    transition: width .15s ease; }
-
-.p-foot { text-align: center; color: var(--faint); font-size: 11.5px; margin: 6px 0 4px; }

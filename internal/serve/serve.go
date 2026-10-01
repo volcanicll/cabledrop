@@ -1,6 +1,14 @@
-package main
+// Package serve is the HTTP surface shared by both clients: the JSON API plus
+// the embedded pages.
+//
+// It depends on model and on the narrow Backend interface below — never on the
+// app package. The app implements Backend and starts this package's server for
+// the phone; the native panel reaches the same handler through Wails' asset
+// server, which is what keeps both clients on one API.
+package serve
 
 import (
+	"embed"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -10,18 +18,65 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
-	"runtime"
 	"sort"
 	"strings"
 	"time"
+
+	"github.com/volcanicll/cabledrop/internal/model"
 )
 
-func goos() string { return runtime.GOOS }
+//go:embed all:assets
+var assetsFS embed.FS
+
+// Backend is everything the HTTP handlers need from the application. It is the
+// seam that keeps serve independent of the app and testable on its own.
+type Backend interface {
+	// State snapshots everything the UI needs.
+	State() model.State
+	// Refresh re-detects the device right now.
+	Refresh()
+	Connected() bool
+	// Native reports whether the request came from the desktop panel. Phone
+	// requests must not be able to drive desktop-only surfaces (pickers,
+	// panel visibility).
+	Native() bool
+
+	ServeDir() string
+	SetServeDir(dir string) error
+	StartServing() error
+	StopServing()
+
+	ClipboardText() string
+	ClipboardSet(text string) error
+	Note() (string, int64)
+	SetNote(text string)
+
+	ListDeviceDir(dir string) ([]model.Entry, error)
+	DeviceDirs() []model.Entry
+	// CheckDevicePath rejects device paths outside the shared-storage
+	// whitelist, so callers get a synchronous 403 instead of a failed row.
+	CheckDevicePath(path string) error
+	// PullDeviceFile copies a device file into the shared folder, in the
+	// background; the transfer shows up in State.
+	PullDeviceFile(remote string)
+	DeleteDevicePath(remote string) error
+	PushFiles(paths []string, destDir string)
+	ClearTransfers()
+
+	// PickFiles and PickDir open the system file picker. Implementations step
+	// the panel aside while the dialog is up.
+	PickFiles(prompt string) ([]string, error)
+	PickDir(prompt string) (string, error)
+	// OpenPath reveals a folder in the platform file manager.
+	OpenPath(path string)
+
+	HidePanel()
+}
 
 // devicePathStatus separates "you may not touch that" from "the device said
 // no", because the two call for different fixes.
 func devicePathStatus(err error) int {
-	if errors.Is(err, ErrBadDevicePath) {
+	if errors.Is(err, model.ErrBadDevicePath) {
 		return http.StatusForbidden
 	}
 	return http.StatusBadGateway
@@ -33,23 +88,23 @@ func devicePathStatus(err error) int {
 // asset server) and the phone's browser (through adb reverse). forPhone only
 // decides which page "/" returns; the API is identical, so every feature is
 // available on both sides.
-func NewHandler(a *App, forPhone bool) http.Handler {
+func NewHandler(b Backend, forPhone bool) http.Handler {
 	mux := http.NewServeMux()
 
 	mux.HandleFunc("GET /api/state", func(w http.ResponseWriter, r *http.Request) {
-		writeJSON(w, a.State())
+		writeJSON(w, b.State())
 	})
 
 	mux.HandleFunc("POST /api/refresh", func(w http.ResponseWriter, r *http.Request) {
-		a.refresh()
-		writeJSON(w, a.State())
+		b.Refresh()
+		writeJSON(w, b.State())
 	})
 
 	// --- desktop clipboard, both directions ---------------------------
 
 	mux.HandleFunc("GET /api/clip", func(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, map[string]any{
-			"text": a.clip.Text(),
+			"text": b.ClipboardText(),
 			"at":   time.Now().Unix(),
 		})
 	})
@@ -63,7 +118,7 @@ func NewHandler(a *App, forPhone bool) http.Handler {
 			httpError(w, http.StatusBadRequest, "请求格式不对")
 			return
 		}
-		if err := a.clip.Set(body.Text); err != nil {
+		if err := b.ClipboardSet(body.Text); err != nil {
 			httpError(w, http.StatusInternalServerError, "写入剪贴板失败: "+err.Error())
 			return
 		}
@@ -73,7 +128,7 @@ func NewHandler(a *App, forPhone bool) http.Handler {
 	// --- text handoff --------------------------------------------------
 
 	mux.HandleFunc("GET /api/note", func(w http.ResponseWriter, r *http.Request) {
-		text, at := a.Note()
+		text, at := b.Note()
 		writeJSON(w, map[string]any{"text": text, "at": at})
 	})
 
@@ -85,7 +140,7 @@ func NewHandler(a *App, forPhone bool) http.Handler {
 			httpError(w, http.StatusBadRequest, "请求格式不对")
 			return
 		}
-		a.SetNote(body.Text)
+		b.SetNote(body.Text)
 		writeJSON(w, map[string]any{"ok": true})
 	})
 
@@ -96,20 +151,20 @@ func NewHandler(a *App, forPhone bool) http.Handler {
 		if dir == "" {
 			dir = "/sdcard"
 		}
-		entries, err := ListDir(dir)
+		entries, err := b.ListDeviceDir(dir)
 		if err != nil {
 			httpError(w, devicePathStatus(err), err.Error())
 			return
 		}
 		writeJSON(w, map[string]any{
 			"path":    dir,
-			"parent":  parentDir(dir),
+			"parent":  parentOf(dir),
 			"entries": entries,
 		})
 	})
 
 	mux.HandleFunc("GET /api/device/dirs", func(w http.ResponseWriter, r *http.Request) {
-		writeJSON(w, map[string]any{"dirs": DeviceDirs()})
+		writeJSON(w, map[string]any{"dirs": b.DeviceDirs()})
 	})
 
 	mux.HandleFunc("POST /api/device/pull", func(w http.ResponseWriter, r *http.Request) {
@@ -120,15 +175,16 @@ func NewHandler(a *App, forPhone bool) http.Handler {
 			httpError(w, http.StatusBadRequest, "缺少 path")
 			return
 		}
-		// Checked here rather than only inside PullFile: the transfer runs in
-		// the background, so an invalid path would otherwise come back as a
-		// cheerful 200 and a failed row the user has to notice.
-		if err := CheckDevicePath(body.Path); err != nil {
+		// The path whitelist is enforced again inside PullDeviceFile, but the
+		// pull runs in the background — an invalid path would otherwise come
+		// back as a cheerful 200 and a failed row the user has to notice.
+		// Checking here surfaces the mistake as a 403 instead.
+		if err := b.CheckDevicePath(body.Path); err != nil {
 			httpError(w, http.StatusForbidden, err.Error())
 			return
 		}
-		a.PullFile(body.Path)
-		writeJSON(w, map[string]any{"ok": true, "into": a.ServeDir()})
+		b.PullDeviceFile(body.Path)
+		writeJSON(w, map[string]any{"ok": true, "into": b.ServeDir()})
 	})
 
 	mux.HandleFunc("POST /api/device/delete", func(w http.ResponseWriter, r *http.Request) {
@@ -139,7 +195,7 @@ func NewHandler(a *App, forPhone bool) http.Handler {
 			httpError(w, http.StatusBadRequest, "缺少 path")
 			return
 		}
-		if err := DeletePath(body.Path); err != nil {
+		if err := b.DeleteDevicePath(body.Path); err != nil {
 			httpError(w, devicePathStatus(err), err.Error())
 			return
 		}
@@ -147,8 +203,8 @@ func NewHandler(a *App, forPhone bool) http.Handler {
 	})
 
 	mux.HandleFunc("POST /api/transfers/clear", func(w http.ResponseWriter, r *http.Request) {
-		a.ClearTransfers()
-		writeJSON(w, a.State())
+		b.ClearTransfers()
+		writeJSON(w, b.State())
 	})
 
 	// --- local files -> phone ----------------------------------------
@@ -162,7 +218,7 @@ func NewHandler(a *App, forPhone bool) http.Handler {
 			httpError(w, http.StatusBadRequest, "没有要发送的文件")
 			return
 		}
-		a.PushFiles(body.Paths, body.Dir)
+		b.PushFiles(body.Paths, body.Dir)
 		writeJSON(w, map[string]any{"ok": true, "count": len(body.Paths)})
 	})
 
@@ -173,13 +229,11 @@ func NewHandler(a *App, forPhone bool) http.Handler {
 	// always-on-top and the dialog is not, so the dialog would otherwise open
 	// behind it and read as a dead click.
 	mux.HandleFunc("POST /api/pick/files", func(w http.ResponseWriter, r *http.Request) {
-		if !a.native {
+		if !b.Native() {
 			httpError(w, http.StatusNotImplemented, "此接口只在桌面端可用")
 			return
 		}
-		wasVisible := a.beginModal()
-		paths, err := PickFiles("选择要发送到手机的文件")
-		a.endModal(wasVisible)
+		paths, err := b.PickFiles("选择要发送到手机的文件")
 		if err != nil {
 			httpError(w, http.StatusInternalServerError, err.Error())
 			return
@@ -191,13 +245,11 @@ func NewHandler(a *App, forPhone bool) http.Handler {
 	})
 
 	mux.HandleFunc("POST /api/pick/dir", func(w http.ResponseWriter, r *http.Request) {
-		if !a.native {
+		if !b.Native() {
 			httpError(w, http.StatusNotImplemented, "此接口只在桌面端可用")
 			return
 		}
-		wasVisible := a.beginModal()
-		dir, err := PickDir("选择要与手机共享的文件夹")
-		a.endModal(wasVisible)
+		dir, err := b.PickDir("选择要与手机共享的文件夹")
 		if err != nil {
 			httpError(w, http.StatusInternalServerError, err.Error())
 			return
@@ -208,7 +260,7 @@ func NewHandler(a *App, forPhone bool) http.Handler {
 	// --- shared folder -------------------------------------------------
 
 	mux.HandleFunc("GET /api/shared", func(w http.ResponseWriter, r *http.Request) {
-		root := a.ServeDir()
+		root := b.ServeDir()
 		list, err := listLocal(root)
 		if err != nil {
 			httpError(w, http.StatusInternalServerError, err.Error())
@@ -225,20 +277,20 @@ func NewHandler(a *App, forPhone bool) http.Handler {
 			httpError(w, http.StatusBadRequest, "缺少 dir")
 			return
 		}
-		if err := a.SetServeDir(body.Dir); err != nil {
+		if err := b.SetServeDir(body.Dir); err != nil {
 			httpError(w, http.StatusBadRequest, err.Error())
 			return
 		}
-		writeJSON(w, a.State())
+		writeJSON(w, b.State())
 	})
 
 	// Reveals the shared folder in Finder / Explorer, native only.
 	mux.HandleFunc("POST /api/shared/open", func(w http.ResponseWriter, r *http.Request) {
-		if !a.native {
+		if !b.Native() {
 			httpError(w, http.StatusNotImplemented, "此接口只在桌面端可用")
 			return
 		}
-		openInFileManager(a.ServeDir())
+		b.OpenPath(b.ServeDir())
 		writeJSON(w, map[string]any{"ok": true})
 	})
 
@@ -246,11 +298,11 @@ func NewHandler(a *App, forPhone bool) http.Handler {
 	// outside the panel are handled natively. Native only, so a stray request
 	// from the phone cannot dismiss a panel nobody is looking at.
 	mux.HandleFunc("POST /api/panel/hide", func(w http.ResponseWriter, r *http.Request) {
-		if !a.native {
+		if !b.Native() {
 			httpError(w, http.StatusNotImplemented, "此接口只在桌面端可用")
 			return
 		}
-		a.hidePanel()
+		b.HidePanel()
 		writeJSON(w, map[string]any{"ok": true})
 	})
 
@@ -261,7 +313,7 @@ func NewHandler(a *App, forPhone bool) http.Handler {
 			httpError(w, http.StatusBadRequest, "缺少 p")
 			return
 		}
-		root := a.ServeDir()
+		root := b.ServeDir()
 		target, err := safeJoin(root, p)
 		if err != nil {
 			httpError(w, http.StatusForbidden, "路径不在共享目录内")
@@ -283,12 +335,12 @@ func NewHandler(a *App, forPhone bool) http.Handler {
 			httpError(w, http.StatusBadRequest, "上传解析失败: "+err.Error())
 			return
 		}
-		saved, err := saveUploads(r.MultipartForm, a.ServeDir())
+		saved, err := saveUploads(r.MultipartForm, b.ServeDir())
 		if err != nil {
 			httpError(w, http.StatusInternalServerError, err.Error())
 			return
 		}
-		writeJSON(w, map[string]any{"ok": true, "saved": saved, "into": a.ServeDir()})
+		writeJSON(w, map[string]any{"ok": true, "saved": saved, "into": b.ServeDir()})
 	})
 
 	// --- server on/off -------------------------------------------------
@@ -299,18 +351,18 @@ func NewHandler(a *App, forPhone bool) http.Handler {
 		}
 		json.NewDecoder(r.Body).Decode(&body)
 		if body.On {
-			if !a.isConnected() {
+			if !b.Connected() {
 				httpError(w, http.StatusConflict, "手机没连上，先插线")
 				return
 			}
-			if err := a.StartServing(); err != nil {
+			if err := b.StartServing(); err != nil {
 				httpError(w, http.StatusBadGateway, err.Error())
 				return
 			}
 		} else {
-			a.StopServing()
+			b.StopServing()
 		}
-		writeJSON(w, a.State())
+		writeJSON(w, b.State())
 	})
 
 	// --- static --------------------------------------------------------
@@ -333,17 +385,17 @@ func NewHandler(a *App, forPhone bool) http.Handler {
 // during development.
 func staticHandler(fsys fs.FS, forPhone bool) http.Handler {
 	fileServer := http.FileServer(http.FS(fsys))
-	page := "index.html"
+	page := "panel.html"
 	if forPhone {
 		page = "phone.html"
 	}
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		serve := ""
 		switch r.URL.Path {
-		case "/", "/index.html":
+		case "/", "/panel.html":
 			serve = page
 		case "/panel":
-			serve = "index.html"
+			serve = "panel.html"
 		}
 		if serve == "" {
 			fileServer.ServeHTTP(w, r)
@@ -360,10 +412,10 @@ func staticHandler(fsys fs.FS, forPhone bool) http.Handler {
 	})
 }
 
-// newHTTPServer wraps the handler in a server with sane timeouts.
-func newHTTPServer(a *App, _ string, forPhone bool) *http.Server {
+// NewServer wraps the handler in a server with sane timeouts.
+func NewServer(b Backend, forPhone bool) *http.Server {
 	return &http.Server{
-		Handler:           NewHandler(a, forPhone),
+		Handler:           NewHandler(b, forPhone),
 		ReadHeaderTimeout: 10 * time.Second,
 		// Generous: a large upload or download over USB is a single request.
 		WriteTimeout: 0,
@@ -385,13 +437,23 @@ func httpError(w http.ResponseWriter, code int, msg string) {
 	json.NewEncoder(w).Encode(map[string]string{"error": msg})
 }
 
+// parentOf returns the containing directory of a device path, or "" at the root.
+func parentOf(p string) string {
+	p = strings.TrimRight(p, "/")
+	i := strings.LastIndex(p, "/")
+	if i <= 0 {
+		return ""
+	}
+	return p[:i]
+}
+
 // listLocal lists the shared folder as the phone sees it.
-func listLocal(root string) ([]Entry, error) {
+func listLocal(root string) ([]model.Entry, error) {
 	items, err := os.ReadDir(root)
 	if err != nil {
 		return nil, err
 	}
-	out := make([]Entry, 0, len(items))
+	out := make([]model.Entry, 0, len(items))
 	for _, it := range items {
 		if strings.HasPrefix(it.Name(), ".") {
 			continue
@@ -400,7 +462,7 @@ func listLocal(root string) ([]Entry, error) {
 		if err != nil {
 			continue
 		}
-		out = append(out, Entry{
+		out = append(out, model.Entry{
 			Name:    it.Name(),
 			Path:    filepath.Join(root, it.Name()),
 			Dir:     it.IsDir(),

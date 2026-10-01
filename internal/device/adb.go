@@ -1,4 +1,10 @@
-package main
+// Package device wraps the adb command line and the device file operations
+// built on it.
+//
+// Everything that reaches the phone goes through here, and every path coming
+// back from a web page has to pass CheckDevicePath before this package will
+// touch it.
+package device
 
 import (
 	"bytes"
@@ -12,24 +18,15 @@ import (
 	"strings"
 	"sync"
 	"time"
+
+	"github.com/volcanicll/cabledrop/internal/model"
 )
 
 // ErrNoADB is returned when no adb binary can be found on this machine.
 var ErrNoADB = errors.New("找不到 adb：请安装 Android Platform Tools，或把它放到本程序同目录下")
 
-// Device is one Android device as `adb devices -l` reports it.
-type Device struct {
-	Serial  string `json:"serial"`
-	Model   string `json:"model"`
-	Product string `json:"product"`
-}
-
-func (d Device) Name() string {
-	if d.Model != "" {
-		return d.Model
-	}
-	return d.Serial
-}
+// Default is the process-wide adb handle.
+var Default = &ADB{}
 
 // ADB wraps the adb command line.
 type ADB struct {
@@ -37,8 +34,6 @@ type ADB struct {
 	path   string
 	looked bool
 }
-
-var adb = &ADB{}
 
 // Path is the adb binary to use, located once. Empty when there is none.
 func (a *ADB) Path() string {
@@ -189,7 +184,7 @@ func prependPath(dir string) string {
 }
 
 // Devices lists the Android devices currently attached and authorised.
-func (a *ADB) Devices() ([]Device, error) {
+func (a *ADB) Devices() ([]model.Device, error) {
 	out, _, code, err := a.Run(15*time.Second, "devices", "-l")
 	if err != nil {
 		return nil, err
@@ -198,7 +193,7 @@ func (a *ADB) Devices() ([]Device, error) {
 		return nil, errors.New("adb devices 失败")
 	}
 
-	var devices []Device
+	var devices []model.Device
 	for _, line := range strings.Split(out, "\n") {
 		fields := strings.Fields(line)
 		// "<serial>  device  usb:3-1 product:PJF110 model:PJF110 device:OP5CFBL1"
@@ -209,7 +204,7 @@ func (a *ADB) Devices() ([]Device, error) {
 		if fields[0] == "List" {
 			continue
 		}
-		d := Device{Serial: fields[0]}
+		d := model.Device{Serial: fields[0]}
 		for _, kv := range fields[2:] {
 			switch {
 			case strings.HasPrefix(kv, "model:"):
@@ -224,16 +219,16 @@ func (a *ADB) Devices() ([]Device, error) {
 }
 
 // FirstDevice returns the only device, or an error explaining what's wrong.
-func (a *ADB) FirstDevice() (Device, error) {
+func (a *ADB) FirstDevice() (model.Device, error) {
 	if a.Path() == "" {
-		return Device{}, ErrNoADB
+		return model.Device{}, ErrNoADB
 	}
 	devices, err := a.Devices()
 	if err != nil {
-		return Device{}, err
+		return model.Device{}, err
 	}
 	if len(devices) == 0 {
-		return Device{}, errors.New("没有检测到手机。请插上 USB 线，并在手机上把 USB 用途改成「传输文件」。")
+		return model.Device{}, errors.New("没有检测到手机。请插上 USB 线，并在手机上把 USB 用途改成「传输文件」。")
 	}
 	return devices[0], nil
 }

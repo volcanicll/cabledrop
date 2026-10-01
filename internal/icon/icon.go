@@ -1,4 +1,4 @@
-package main
+package icon
 
 import (
 	"bytes"
@@ -209,12 +209,12 @@ func offRight(broken bool) float64 {
 	return 0
 }
 
-// trayIcon returns a PNG for the current connection state.
+// TrayIcon returns a PNG for the current connection state.
 //
 // macOS template icons use only the alpha channel — the system tints the shape
 // for light and dark menu bars — so the mask is drawn in alpha, RGB left at
 // zero.
-func trayIcon(connected bool) []byte {
+func TrayIcon(connected bool) []byte {
 	m := newMask(iconUnits)
 	const stroke = 3.4
 	center, arrows := trayCablePath(stroke, !connected)
@@ -223,12 +223,12 @@ func trayIcon(connected bool) []byte {
 	return m.png(36)
 }
 
-// appIconPNG is the coloured application icon at the given pixel size.
+// AppIconPNG is the coloured application icon at the given pixel size.
 //
 // A vertical gradient field (the brand blue, lit from above) with the cable
 // knocked out in white. Small sizes thicken the stroke a little so the cable
 // does not dissolve into the anti-aliasing.
-func appIconPNG(pixels int) []byte {
+func AppIconPNG(pixels int) []byte {
 	stroke := 6.0
 	if pixels < 48 {
 		stroke = 7.0

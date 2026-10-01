@@ -1,61 +1,60 @@
-package main
+// Package app is the state machine: device tracking, transfers, the adb
+// reverse tunnel and the shared folder.
+//
+// It implements serve.Backend — that is the only contract the HTTP layer gets
+// — and defines the small PanelUI/TrayUI surfaces the desktop shell (package
+// ui) implements. app never imports ui, so the UI can be replaced or run
+// headless.
+package app
 
 import (
 	"fmt"
 	"log"
 	"net"
+	"net/http"
 	"os"
+	"os/exec"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"sync"
 	"sync/atomic"
 	"time"
 
-	"github.com/wailsapp/wails/v3/pkg/application"
+	"github.com/volcanicll/cabledrop/internal/clipboard"
+	"github.com/volcanicll/cabledrop/internal/device"
+	"github.com/volcanicll/cabledrop/internal/model"
+	"github.com/volcanicll/cabledrop/internal/picker"
+	"github.com/volcanicll/cabledrop/internal/serve"
 )
 
-// Transfer is one file movement, shown in the panel's history.
-type Transfer struct {
-	ID     string `json:"id"`
-	Name   string `json:"name"`
-	Kind   string `json:"kind"`  // push | pull | upload
-	State  string `json:"state"` // running | done | failed
-	Detail string `json:"detail"`
-	At     int64  `json:"at"`
+// PanelUI is the visible panel surface app needs (implemented by ui).
+type PanelUI interface {
+	Visible() bool
+	Show()
+	Hide()
 }
 
-// State is everything the UI needs in one payload.
-type State struct {
-	Platform    string     `json:"platform"`
-	ADBFound    bool       `json:"adbFound"`
-	ADBPath     string     `json:"adbPath"`
-	Connected   bool       `json:"connected"`
-	Device      string     `json:"device"`
-	Serial      string     `json:"serial"`
-	StorageFree string     `json:"storageFree"`
-	ServeDir    string     `json:"serveDir"`
-	Serving     bool       `json:"serving"`
-	Port        int        `json:"port"`
-	PhoneURL    string     `json:"phoneURL"`
-	Transfers   []Transfer `json:"transfers"`
-	Error       string     `json:"error,omitempty"`
-	Native      bool       `json:"native"`
+// TrayUI is the menu-bar icon surface (implemented by ui).
+type TrayUI interface {
+	// SetStatus applies the connection state to the icon and tooltip.
+	SetStatus(connected bool, tooltip string)
 }
 
 // App holds all the state the panel and the phone both read.
 type App struct {
 	mu sync.Mutex
 
-	clip     *Clipboard
+	clip     *clipboard.Clipboard
 	serveDir string
 
 	listener net.Listener
 	port     int
 
-	transfers []Transfer
+	transfers []model.Transfer
 	seq       int
 
-	dev       Device
+	dev       model.Device
 	connected bool
 	free      string
 
@@ -78,9 +77,8 @@ type App struct {
 	lastErr string
 	native  bool
 
-	tray  *application.SystemTray
-	panel *application.WebviewWindow
-	core  *application.App
+	panelUI PanelUI
+	trayUI  TrayUI
 
 	// hiddenAt is when the panel last dismissed itself, in unix millis. The
 	// tray click handler needs it to tell "user clicked to close" apart from
@@ -90,19 +88,39 @@ type App struct {
 	stopWatch chan struct{}
 }
 
+// Compile-time proof that the app satisfies the HTTP layer's contract.
+var _ serve.Backend = (*App)(nil)
+
+// newPhoneServer builds the listener the phone's browser talks to, serving the
+// phone layout at "/" over the same Backend the panel uses.
+func (a *App) newPhoneServer() *http.Server {
+	return serve.NewServer(a, true)
+}
+
 const (
 	defaultPort  = 8765
 	maxTransfers = 40
 )
 
-func NewApp() *App {
+func New() *App {
 	return &App{
-		clip:      NewClipboard(),
+		clip:      clipboard.New(),
 		serveDir:  defaultServeDir(),
-		transfers: make([]Transfer, 0, 8),
+		transfers: make([]model.Transfer, 0, 8),
 		native:    true,
 	}
 }
+
+// AttachPanel wires the desktop shell's panel in. Both are safe to call with
+// nil or before the shell exists: every use checks.
+func (a *App) AttachPanel(p PanelUI) { a.panelUI = p }
+
+// AttachTray wires the desktop shell's tray icon in.
+func (a *App) AttachTray(t TrayUI) { a.trayUI = t }
+
+// StartClipboard begins mirroring the desktop clipboard without starting the
+// device watcher. The dev server uses it; the real app gets both from Start.
+func (a *App) StartClipboard() { a.clip.Start() }
 
 // defaultServeDir is a dedicated folder rather than Downloads: the point of
 // this app is a predictable place things land, not more clutter in Downloads.
@@ -167,8 +185,8 @@ func (a *App) watch() {
 }
 
 func (a *App) refresh() {
-	if adb.Path() == "" {
-		adb.Refresh()
+	if device.Default.Path() == "" {
+		device.Default.Refresh()
 	}
 
 	a.mu.Lock()
@@ -180,13 +198,13 @@ func (a *App) refresh() {
 	prevConnected := a.connected
 	a.mu.Unlock()
 
-	dev, err := adb.FirstDevice()
+	dev, err := device.Default.FirstDevice()
 	a.mu.Lock()
 	switch {
 	case err != nil:
 		a.connected = false
 		a.free = ""
-		a.dev = Device{}
+		a.dev = model.Device{}
 		if len(a.transfers) == 0 {
 			a.lastErr = ""
 		}
@@ -194,7 +212,7 @@ func (a *App) refresh() {
 		a.connected = true
 		a.dev = dev
 		a.mu.Unlock()
-		free := FreeSpaceOnDevice()
+		free := device.FreeSpaceOnDevice()
 		a.mu.Lock()
 		a.free = free
 		a.lastErr = ""
@@ -219,6 +237,13 @@ func (a *App) refresh() {
 	a.syncTray()
 }
 
+// Refresh re-detects the device right now. The tray menu and /api/refresh
+// both land here.
+func (a *App) Refresh() {
+	device.Default.Refresh()
+	a.refresh()
+}
+
 // rebuildTunnel re-points the device's loopback at the running listener.
 func (a *App) rebuildTunnel() {
 	a.mu.Lock()
@@ -230,7 +255,7 @@ func (a *App) rebuildTunnel() {
 		return
 	}
 	remote := fmt.Sprintf("tcp:%d", port)
-	adb.Run(15*time.Second, "reverse", remote, remote)
+	device.Default.Run(15*time.Second, "reverse", remote, remote)
 }
 
 func (a *App) isConnected() bool {
@@ -238,6 +263,14 @@ func (a *App) isConnected() bool {
 	defer a.mu.Unlock()
 	return a.connected
 }
+
+// Connected reports whether a phone is attached right now.
+func (a *App) Connected() bool { return a.isConnected() }
+
+// Native is always true here: the app struct is the desktop side. A phone
+// request reaches the same handler but Backend through a listener that was
+// built for it — native-gated endpoints are gated per-listener, not here.
+func (a *App) Native() bool { return a.native }
 
 func (a *App) Serving() bool {
 	a.mu.Lock()
@@ -250,7 +283,7 @@ func (a *App) Serving() bool {
 // seconds, and re-setting an NSStatusItem image each time makes AppKit reload
 // its preferences and redraw for nothing.
 func (a *App) syncTray() {
-	if a.tray == nil {
+	if a.trayUI == nil {
 		return
 	}
 	connected := a.isConnected()
@@ -269,12 +302,7 @@ func (a *App) syncTray() {
 	if connected {
 		tooltip = "CableDrop · " + name
 	}
-	icon := trayIcon(connected)
-
-	application.InvokeAsync(func() {
-		a.tray.SetTemplateIcon(icon)
-		a.tray.SetTooltip(tooltip)
-	})
+	a.trayUI.SetStatus(connected, tooltip)
 }
 
 // --- panel ----------------------------------------------------------------
@@ -283,7 +311,7 @@ func (a *App) syncTray() {
 // still counts as "close it" rather than "open it".
 const panelHideGrace = 350 * time.Millisecond
 
-// togglePanel is the tray icon click: show the panel when hidden, hide it
+// TogglePanel is the tray icon click: show the panel when hidden, hide it
 // when shown.
 //
 // The grace window exists because the very click that lands on the tray icon
@@ -291,7 +319,7 @@ const panelHideGrace = 350 * time.Millisecond
 // window becomes key before the action fires). The blur handler then dismisses
 // the panel a beat before this handler reads visibility, and a naive toggle
 // would immediately re-open what the user just asked to close.
-func (a *App) togglePanel() {
+func (a *App) TogglePanel() {
 	if a.panelVisible() {
 		a.hidePanel()
 		return
@@ -302,10 +330,10 @@ func (a *App) togglePanel() {
 	a.showPanel()
 }
 
-// panelFocusLost dismisses the panel whenever it stops being the key window —
+// PanelFocusLost dismisses the panel whenever it stops being the key window —
 // a click on the desktop, another app, anything. This is what makes the panel
 // behave like a menu instead of a stubborn always-on-top overlay.
-func (a *App) panelFocusLost() {
+func (a *App) PanelFocusLost() {
 	if !a.panelVisible() {
 		return
 	}
@@ -313,32 +341,29 @@ func (a *App) panelFocusLost() {
 }
 
 func (a *App) panelVisible() bool {
-	if a.panel == nil {
+	if a.panelUI == nil {
 		return false
 	}
-	return a.panel.IsVisible()
+	return a.panelUI.Visible()
 }
 
 func (a *App) showPanel() {
-	if a.panel == nil {
+	if a.panelUI == nil {
 		return
 	}
-	if a.tray != nil {
-		// ShowWindow positions the panel under the icon before showing it,
-		// which matters if the user has changed displays since last time.
-		a.tray.ShowWindow()
-		return
-	}
-	application.InvokeAsync(func() { a.panel.Show().Focus() })
+	a.panelUI.Show()
 }
 
 func (a *App) hidePanel() {
 	a.hiddenAt.Store(time.Now().UnixMilli())
-	if a.panel == nil {
+	if a.panelUI == nil {
 		return
 	}
-	application.InvokeAsync(func() { a.panel.Hide() })
+	a.panelUI.Hide()
 }
+
+// HidePanel is the API-facing form: the page's Escape key lands here.
+func (a *App) HidePanel() { a.hidePanel() }
 
 // beginModal tucks the panel away for the duration of a native dialog.
 //
@@ -360,17 +385,17 @@ func (a *App) endModal(wasVisible bool) {
 }
 
 // State snapshots everything for the UI.
-func (a *App) State() State {
+func (a *App) State() model.State {
 	a.mu.Lock()
 	defer a.mu.Unlock()
 
-	tr := make([]Transfer, len(a.transfers))
+	tr := make([]model.Transfer, len(a.transfers))
 	copy(tr, a.transfers)
 
-	return State{
-		Platform:    goos(),
-		ADBFound:    adb.Path() != "",
-		ADBPath:     adb.Path(),
+	return model.State{
+		Platform:    runtime.GOOS,
+		ADBFound:    device.Default.Path() != "",
+		ADBPath:     device.Default.Path(),
 		Connected:   a.connected,
 		Device:      a.dev.Name(),
 		Serial:      a.dev.Serial,
@@ -390,11 +415,6 @@ func (a *App) portOf() int {
 		return defaultPort
 	}
 	return a.port
-}
-
-// phoneURL is what the user opens on the device.
-func (a *App) phoneURL() string {
-	return fmt.Sprintf("http://localhost:%d", a.portOf())
 }
 
 // --- serving -------------------------------------------------------------
@@ -426,10 +446,9 @@ func (a *App) StartServing() error {
 	a.mu.Lock()
 	a.listener = ln
 	a.port = port
-	dir := a.serveDir
 	a.mu.Unlock()
 
-	srv := newHTTPServer(a, dir, true)
+	srv := a.newPhoneServer()
 	go func() {
 		if err := srv.Serve(ln); err != nil {
 			log.Printf("本地服务结束: %v", err)
@@ -440,7 +459,7 @@ func (a *App) StartServing() error {
 	// doesn't tear the listener down: the panel can still be reached from this
 	// machine, which is what makes the app diagnosable when adb misbehaves.
 	remote := fmt.Sprintf("tcp:%d", port)
-	if _, errOut, code, err := adb.Run(15*time.Second, "reverse", remote, remote); err != nil || code != 0 {
+	if _, errOut, code, err := device.Default.Run(15*time.Second, "reverse", remote, remote); err != nil || code != 0 {
 		msg := "服务已启动，但手机隧道建立失败"
 		if errOut != "" {
 			msg += ": " + strings.TrimSpace(errOut)
@@ -465,7 +484,7 @@ func (a *App) StopServing() {
 		ln.Close()
 	}
 	if port != 0 {
-		adb.Run(10*time.Second, "reverse", "--remove", fmt.Sprintf("tcp:%d", port))
+		device.Default.Run(10*time.Second, "reverse", "--remove", fmt.Sprintf("tcp:%d", port))
 	}
 }
 
@@ -500,7 +519,7 @@ func (a *App) addTransfer(name, kind string) string {
 	defer a.mu.Unlock()
 	a.seq++
 	id := fmt.Sprintf("t%d", a.seq)
-	a.transfers = append([]Transfer{{
+	a.transfers = append([]model.Transfer{{
 		ID: id, Name: name, Kind: kind, State: "running", At: time.Now().Unix(),
 	}}, a.transfers...)
 	if len(a.transfers) > maxTransfers {
@@ -530,7 +549,7 @@ func (a *App) PushFiles(paths []string, destDir string) {
 		p := p
 		id := a.addTransfer(filepath.Base(p), "push")
 		go func() {
-			remote, err := PushFile(p, destDir)
+			remote, err := device.PushFile(p, destDir)
 			if err != nil {
 				a.finishTransfer(id, "failed", err.Error())
 				return
@@ -542,11 +561,11 @@ func (a *App) PushFiles(paths []string, destDir string) {
 	}
 }
 
-// PullFile brings a device file into the shared folder.
-func (a *App) PullFile(remote string) {
+// PullDeviceFile brings a device file into the shared folder.
+func (a *App) PullDeviceFile(remote string) {
 	id := a.addTransfer(baseName(remote), "pull")
 	go func() {
-		if _, err := PullFile(remote, a.ServeDir()); err != nil {
+		if _, err := device.PullFile(remote, a.ServeDir()); err != nil {
 			a.finishTransfer(id, "failed", err.Error())
 			return
 		}
@@ -554,6 +573,15 @@ func (a *App) PullFile(remote string) {
 		// just fills the row.
 		a.finishTransfer(id, "done", "已保存到共享目录")
 	}()
+}
+
+// baseName is device-agnostic: the last path segment, either separator.
+func baseName(p string) string {
+	p = strings.TrimRight(p, "/")
+	if i := strings.LastIndex(p, "/"); i >= 0 {
+		return p[i+1:]
+	}
+	return p
 }
 
 // ClearTransfers empties the finished history.
@@ -586,4 +614,48 @@ func (a *App) Note() (string, int64) {
 	a.mu.Lock()
 	defer a.mu.Unlock()
 	return a.note, a.noteAt
+}
+
+// --- serve.Backend glue --------------------------------------------------
+
+func (a *App) ClipboardText() string { return a.clip.Text() }
+
+func (a *App) ClipboardSet(text string) error { return a.clip.Set(text) }
+
+func (a *App) ListDeviceDir(dir string) ([]model.Entry, error) { return device.ListDir(dir) }
+
+func (a *App) DeviceDirs() []model.Entry { return device.DeviceDirs() }
+
+func (a *App) CheckDevicePath(path string) error { return device.CheckDevicePath(path) }
+
+func (a *App) DeleteDevicePath(remote string) error { return device.DeletePath(remote) }
+
+// PickFiles opens the system file picker, stepping the panel aside for the
+// duration so the dialog is not hidden behind the always-on-top panel.
+func (a *App) PickFiles(prompt string) ([]string, error) {
+	wasVisible := a.beginModal()
+	defer a.endModal(wasVisible)
+	return picker.PickFiles(prompt)
+}
+
+// PickDir is PickFiles for a single directory.
+func (a *App) PickDir(prompt string) (string, error) {
+	wasVisible := a.beginModal()
+	defer a.endModal(wasVisible)
+	return picker.PickDir(prompt)
+}
+
+// OpenPath reveals a folder in Finder, Explorer or the desktop's file manager,
+// so the user doesn't have to remember where it is.
+func (a *App) OpenPath(path string) {
+	var cmd *exec.Cmd
+	switch runtime.GOOS {
+	case "darwin":
+		cmd = exec.Command("open", path)
+	case "windows":
+		cmd = exec.Command("explorer", path)
+	default:
+		cmd = exec.Command("xdg-open", path)
+	}
+	_ = cmd.Start()
 }
