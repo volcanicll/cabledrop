@@ -64,17 +64,17 @@ func (f *fakeBackend) State() model.State {
 	f.state.Native = f.native
 	return f.state
 }
-func (f *fakeBackend) Refresh()                            { f.refreshes++ }
-func (f *fakeBackend) Connected() bool                     { return f.state.Connected }
-func (f *fakeBackend) Native() bool                        { return f.native }
-func (f *fakeBackend) ServeDir() string                    { return f.serveDir }
-func (f *fakeBackend) SetServeDir(dir string) error        { f.serveDir = dir; return nil }
-func (f *fakeBackend) StartServing() error                 { f.serving = true; return nil }
-func (f *fakeBackend) StopServing()                        { f.serving = false }
-func (f *fakeBackend) ClipboardText() string               { return f.clip }
-func (f *fakeBackend) ClipboardSet(text string) error      { f.clip = text; return f.clipErr }
-func (f *fakeBackend) Note() (string, int64)               { return f.note, f.noteAt }
-func (f *fakeBackend) SetNote(text string)                 { f.note = text; f.noteAt = 42 }
+func (f *fakeBackend) Refresh()                       { f.refreshes++ }
+func (f *fakeBackend) Connected() bool                { return f.state.Connected }
+func (f *fakeBackend) Native() bool                   { return f.native }
+func (f *fakeBackend) ServeDir() string               { return f.serveDir }
+func (f *fakeBackend) SetServeDir(dir string) error   { f.serveDir = dir; return nil }
+func (f *fakeBackend) StartServing() error            { f.serving = true; return nil }
+func (f *fakeBackend) StopServing()                   { f.serving = false }
+func (f *fakeBackend) ClipboardText() string          { return f.clip }
+func (f *fakeBackend) ClipboardSet(text string) error { f.clip = text; return f.clipErr }
+func (f *fakeBackend) Note() (string, int64)          { return f.note, f.noteAt }
+func (f *fakeBackend) SetNote(text string)            { f.note = text; f.noteAt = 42 }
 func (f *fakeBackend) ListDeviceDir(dir string) ([]model.Entry, error) {
 	return f.entries, f.listErr
 }
