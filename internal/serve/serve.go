@@ -273,12 +273,36 @@ func NewHandler(backend Backend, forPhone bool) http.Handler {
 
 	mux.HandleFunc("GET /api/shared", func(w http.ResponseWriter, r *http.Request) {
 		root := b.ServeDir()
-		list, err := listLocal(root)
+		// Optional subdirectory: ?path= is resolved inside the shared root
+		// and refused if it escapes, exactly like /dl. Omitting it keeps the
+		// root — the shape older clients built on.
+		dir := root
+		sub := ""
+		if p := r.URL.Query().Get("path"); p != "" {
+			d, err := safeJoin(root, p)
+			if err != nil {
+				httpError(w, http.StatusForbidden, "路径不在共享目录内")
+				return
+			}
+			fi, err := os.Stat(d)
+			if err != nil || !fi.IsDir() {
+				httpError(w, http.StatusNotFound, "目录不存在")
+				return
+			}
+			dir = d
+			sub = p
+		}
+		list, err := listLocal(dir)
 		if err != nil {
 			httpError(w, http.StatusInternalServerError, err.Error())
 			return
 		}
-		writeJSON(w, map[string]any{"root": root, "entries": list})
+		writeJSON(w, map[string]any{
+			"root":    root,
+			"path":    dir,
+			"sub":     sub,
+			"entries": list,
+		})
 	})
 
 	mux.HandleFunc("POST /api/shared/dir", func(w http.ResponseWriter, r *http.Request) {
