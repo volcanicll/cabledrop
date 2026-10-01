@@ -33,6 +33,10 @@ type ADB struct {
 	mu     sync.Mutex
 	path   string
 	looked bool
+
+	// runHook, when set, replaces process execution entirely. Tests inject
+	// here to fake devices; production leaves it nil.
+	runHook func(timeout time.Duration, args []string) (string, string, int, error)
 }
 
 // Path is the adb binary to use, located once. Empty when there is none.
@@ -119,6 +123,20 @@ func findADB() string {
 // Both pipes are drained concurrently with the wait: a child that fills a pipe
 // buffer while we block on Wait would otherwise deadlock.
 func (a *ADB) Run(timeout time.Duration, args ...string) (string, string, int, error) {
+	var stdout, stderr bytes.Buffer
+
+	if a.runHook != nil {
+		// The hook replaces only process execution; the exit-code and stderr
+		// post-processing below is part of the contract and still applies.
+		stdoutStr, stderrStr, code, err := a.runHook(timeout, args)
+		stdout.WriteString(stdoutStr)
+		stderr.WriteString(stderrStr)
+		if err != nil {
+			return stdout.String(), stderr.String(), code, err
+		}
+		return a.classify(stdout.String(), stderr.String(), code)
+	}
+
 	bin := a.Path()
 	if bin == "" {
 		return "", "", -1, ErrNoADB
@@ -132,7 +150,6 @@ func (a *ADB) Run(timeout time.Duration, args ...string) (string, string, int, e
 	// directory keeps those resolvable.
 	cmd.Env = append(os.Environ(), "PATH="+prependPath(filepath.Dir(bin)))
 
-	var stdout, stderr bytes.Buffer
 	cmd.Stdout = &stdout
 	cmd.Stderr = &stderr
 	cmd.Stdin = nil
@@ -151,13 +168,17 @@ func (a *ADB) Run(timeout time.Duration, args ...string) (string, string, int, e
 			return stdout.String(), stderr.String(), -1, err
 		}
 	}
+	return a.classify(stdout.String(), stderr.String(), code)
+}
 
-	// adb reports some device-side failures on stderr while still exiting 0.
-	if code == 0 && isFatalStderr(stderr.String()) {
-		return stdout.String(), stderr.String(), 1,
-			errors.New(strings.TrimSpace(stderr.String()))
+// classify applies the exit-code contract: adb reports some device-side
+// failures on stderr while still exiting 0, and those come back as code 1
+// with the message as the error.
+func (a *ADB) classify(stdout, stderr string, code int) (string, string, int, error) {
+	if code == 0 && isFatalStderr(stderr) {
+		return stdout, stderr, 1, errors.New(strings.TrimSpace(stderr))
 	}
-	return stdout.String(), stderr.String(), code, nil
+	return stdout, stderr, code, nil
 }
 
 // isFatalStderr catches the wrapper errors adb prints while exiting zero.

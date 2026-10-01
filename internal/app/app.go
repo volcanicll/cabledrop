@@ -80,6 +80,11 @@ type App struct {
 	panelUI PanelUI
 	trayUI  TrayUI
 
+	// pushFile and pullFile are the device transfer operations. Tests inject
+	// fakes here; production leaves them nil and the device package is used.
+	pushFile func(local, remoteDir string) (string, error)
+	pullFile func(remote, localDir string) (string, error)
+
 	// hiddenAt is when the panel last dismissed itself, in unix millis. The
 	// tray click handler needs it to tell "user clicked to close" apart from
 	// "the click itself stole focus and the blur handler already closed it".
@@ -278,10 +283,15 @@ func (a *App) Serving() bool {
 	return a.listener != nil
 }
 
+// trayNeedsUpdate is the dedupe behind syncTray, as a pure function: the
+// watcher calls syncTray every two seconds, and re-setting an NSStatusItem
+// image each time makes AppKit reload its preferences and redraw for nothing.
+func trayNeedsUpdate(set bool, lastConnected bool, lastName string, connected bool, name string) bool {
+	return !set || lastConnected != connected || lastName != name
+}
+
 // syncTray updates the menu bar icon and tooltip. It is a no-op unless
-// something it shows actually changed: the device watcher calls it every two
-// seconds, and re-setting an NSStatusItem image each time makes AppKit reload
-// its preferences and redraw for nothing.
+// something it shows actually changed — see trayNeedsUpdate.
 func (a *App) syncTray() {
 	if a.trayUI == nil {
 		return
@@ -290,7 +300,7 @@ func (a *App) syncTray() {
 
 	a.mu.Lock()
 	name := a.dev.Name()
-	changed := !a.traySet || a.trayConn != connected || a.trayName != name
+	changed := trayNeedsUpdate(a.traySet, a.trayConn, a.trayName, connected, name)
 	a.traySet, a.trayConn, a.trayName = true, connected, name
 	a.mu.Unlock()
 
@@ -545,11 +555,15 @@ func (a *App) finishTransfer(id, state, detail string) {
 
 // PushFiles sends local files to the phone, one transfer record each.
 func (a *App) PushFiles(paths []string, destDir string) {
+	push := a.pushFile
+	if push == nil {
+		push = device.PushFile
+	}
 	for _, p := range paths {
 		p := p
 		id := a.addTransfer(filepath.Base(p), "push")
 		go func() {
-			remote, err := device.PushFile(p, destDir)
+			remote, err := push(p, destDir)
 			if err != nil {
 				a.finishTransfer(id, "failed", err.Error())
 				return
@@ -563,9 +577,13 @@ func (a *App) PushFiles(paths []string, destDir string) {
 
 // PullDeviceFile brings a device file into the shared folder.
 func (a *App) PullDeviceFile(remote string) {
+	pull := a.pullFile
+	if pull == nil {
+		pull = device.PullFile
+	}
 	id := a.addTransfer(baseName(remote), "pull")
 	go func() {
-		if _, err := device.PullFile(remote, a.ServeDir()); err != nil {
+		if _, err := pull(remote, a.ServeDir()); err != nil {
 			a.finishTransfer(id, "failed", err.Error())
 			return
 		}

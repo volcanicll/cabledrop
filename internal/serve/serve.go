@@ -82,13 +82,25 @@ func devicePathStatus(err error) int {
 	return http.StatusBadGateway
 }
 
+// phoneBackend marks a Backend as the phone-facing surface: Native() is false,
+// so pick/panel/open endpoints answer 501 instead of acting on the desktop.
+type phoneBackend struct{ Backend }
+
+func (p phoneBackend) Native() bool { return false }
+
 // NewHandler builds the whole HTTP surface: the JSON API plus the static page.
 //
 // The same handler serves both clients — the native panel (through Wails'
 // asset server) and the phone's browser (through adb reverse). forPhone only
 // decides which page "/" returns; the API is identical, so every feature is
-// available on both sides.
-func NewHandler(b Backend, forPhone bool) http.Handler {
+// available on both sides. Desktop-only endpoints (pickers, panel visibility)
+// answer 501 on the phone-facing surface, though — a web page arriving over
+// the tunnel must not be able to drive native UI.
+func NewHandler(backend Backend, forPhone bool) http.Handler {
+	b := backend
+	if forPhone {
+		b = phoneBackend{backend}
+	}
 	mux := http.NewServeMux()
 
 	mux.HandleFunc("GET /api/state", func(w http.ResponseWriter, r *http.Request) {

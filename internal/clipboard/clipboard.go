@@ -26,10 +26,21 @@ type Clipboard struct {
 
 	// onChange is called with new text whenever the clipboard changes.
 	onChange func(string)
+
+	// read and write are the platform commands; interval how often to poll.
+	// Tests replace them, so none of the behaviour above depends on a real
+	// pasteboard being present.
+	read     func() (string, error)
+	write    func(string) error
+	interval func() time.Duration
 }
 
 func New() *Clipboard {
-	return &Clipboard{}
+	return &Clipboard{
+		read:     readClipboard,
+		write:    writeClipboard,
+		interval: pollInterval,
+	}
 }
 
 // Text returns the last known clipboard contents.
@@ -42,7 +53,7 @@ func (c *Clipboard) Text() string {
 // Set replaces the clipboard and remembers it, so the watcher doesn't report
 // our own write back as a fresh copy.
 func (c *Clipboard) Set(s string) error {
-	if err := writeClipboard(s); err != nil {
+	if err := c.write(s); err != nil {
 		return err
 	}
 	c.mu.Lock()
@@ -56,7 +67,7 @@ func (c *Clipboard) Start() {
 	c.once.Do(func() {
 		c.stopCh = make(chan struct{})
 		// Seed once so the first page load has something to show.
-		if s, err := readClipboard(); err == nil {
+		if s, err := c.read(); err == nil {
 			c.mu.Lock()
 			c.text = s
 			c.mu.Unlock()
@@ -82,30 +93,37 @@ func pollInterval() time.Duration {
 }
 
 func (c *Clipboard) watch() {
-	t := time.NewTicker(pollInterval())
+	t := time.NewTicker(c.interval())
 	defer t.Stop()
 	for {
 		select {
 		case <-c.stopCh:
 			return
 		case <-t.C:
-			s, err := readClipboard()
+			s, err := c.read()
 			if err != nil {
 				continue
 			}
-			c.mu.RLock()
-			same := s == c.text
-			c.mu.RUnlock()
-			if same {
-				continue
-			}
-			c.mu.Lock()
-			c.text = s
-			c.mu.Unlock()
-			if c.onChange != nil && s != "" {
-				c.onChange(s)
-			}
+			c.observe(s)
 		}
+	}
+}
+
+// observe folds one clipboard sample into the state: errors are ignored, an
+// unchanged value is dropped, and a genuinely new non-empty value is stored
+// and announced.
+func (c *Clipboard) observe(s string) {
+	c.mu.RLock()
+	same := s == c.text
+	c.mu.RUnlock()
+	if same {
+		return
+	}
+	c.mu.Lock()
+	c.text = s
+	c.mu.Unlock()
+	if c.onChange != nil && s != "" {
+		c.onChange(s)
 	}
 }
 

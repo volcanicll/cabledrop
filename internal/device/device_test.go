@@ -1,0 +1,211 @@
+package device
+
+import (
+	"errors"
+	"strings"
+	"testing"
+	"time"
+
+	"github.com/volcanicll/cabledrop/internal/model"
+)
+
+// fakeADB is an ADB whose shell answers from a script instead of a process.
+type fakeADB struct {
+	ADB
+	commands []string
+	// reply decides what a shell command returns.
+	reply func(cmd string) (string, error)
+	// pushReply, when set, is what `push` returns.
+	pushReply func(local, remote string) (string, string, int, error)
+}
+
+func newFakeADB(reply func(cmd string) (string, error)) *fakeADB {
+	f := &fakeADB{reply: reply}
+	f.path = "/fake/adb"
+	f.looked = true
+	f.runHook = func(timeout time.Duration, args []string) (string, string, int, error) {
+		f.commands = append(f.commands, strings.Join(args, " "))
+		if len(args) >= 2 && args[0] == "shell" {
+			out, err := f.reply(strings.Join(args[1:], " "))
+			return out, "", 0, err
+		}
+		if args[0] == "push" && f.pushReply != nil {
+			out, errOut, code, err := f.pushReply(args[1], args[2])
+			return out, errOut, code, err
+		}
+		return "", "", 0, nil
+	}
+	return f
+}
+
+func TestShellQuoteSurvivesEmbeddedQuotes(t *testing.T) {
+	sq := func(s string) string { return "'" + s + "'" }
+	escaped := `'\''`
+	cases := []struct{ in, want string }{
+		{"/sdcard", sq("/sdcard")},
+		{"/sdcard/a b", sq("/sdcard/a b")},
+		{"/sdcard/it's", sq("/sdcard/it" + escaped + "s")},
+		{"/sdcard/中文", sq("/sdcard/中文")},
+		{"", sq("")},
+	}
+	for _, c := range cases {
+		if got := shellQuote(c.in); got != c.want {
+			t.Errorf("shellQuote(%q) = %s, want %s", c.in, got, c.want)
+		}
+	}
+}
+
+func TestListDirParsesStatOutput(t *testing.T) {
+	f := newFakeADB(func(cmd string) (string, error) {
+		if !strings.HasPrefix(cmd, "for f in '/sdcard/DCIM'") {
+			t.Fatalf("unexpected command: %s", cmd)
+		}
+		// Directories first by mtime, a dotfile, an unexpanded glob for an
+		// empty subdirectory, and a symlink.
+		return strings.Join([]string{
+			"41a4|4096|1700000100|/sdcard/DCIM/Camera",
+			"81a4|2048|1700000200|/sdcard/DCIM/note.txt",
+			"a1ff|0|1700000000|/sdcard/DCIM/link",
+			"81a4|10|1700000000|/sdcard/DCIM/.nomedia",
+			"81a4|10|1700000000|/sdcard/DCIM/*",
+			"garbage-without-pipes",
+			"",
+		}, "\n"), nil
+	})
+
+	entries, err := f.ListDir("/sdcard/DCIM")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(entries) != 3 {
+		t.Fatalf("entries = %+v", entries)
+	}
+	// Directories first, then newest first. Symlinks count as directories so
+	// the browser can enter them.
+	if entries[0].Name != "Camera" || !entries[0].Dir {
+		t.Errorf("entries[0] = %+v, want Camera dir", entries[0])
+	}
+	if entries[1].Name != "link" || !entries[1].Dir {
+		t.Errorf("entries[1] = %+v, want link dir", entries[1])
+	}
+	if entries[2].Name != "note.txt" || entries[2].Dir || entries[2].Size != 2048 {
+		t.Errorf("entries[2] = %+v", entries[2])
+	}
+}
+
+func TestListDirRejectsPathsOutsideTheWhitelist(t *testing.T) {
+	f := newFakeADB(func(string) (string, error) { return "", nil })
+	for _, dir := range []string{"/etc", "relative", "/sdcard/../data", "/storageemulated"} {
+		if _, err := f.ListDir(dir); !errors.Is(err, model.ErrBadDevicePath) {
+			t.Errorf("ListDir(%q) err = %v, want ErrBadDevicePath", dir, err)
+		}
+	}
+	if len(f.commands) != 0 {
+		t.Errorf("adb was invoked for rejected paths: %v", f.commands)
+	}
+
+	// An empty path means the default root, which is whitelisted.
+	if _, err := f.ListDir(""); err != nil {
+		t.Errorf("ListDir(\"\") = %v, want the /sdcard listing", err)
+	}
+	if len(f.commands) != 1 || !strings.Contains(f.commands[0], "'/sdcard'") {
+		t.Errorf("empty path did not fall back to /sdcard: %v", f.commands)
+	}
+}
+
+func TestPushFileCreatesDestinationThenPushes(t *testing.T) {
+	f := newFakeADB(func(cmd string) (string, error) {
+		if strings.HasPrefix(cmd, "test -d ") {
+			// Only /sdcard/Download exists of the default upload candidates.
+			if strings.Contains(cmd, "/sdcard/Download") {
+				return "yes", nil
+			}
+			return "", errors.New("missing")
+		}
+		return "", nil
+	})
+	f.pushReply = func(local, remote string) (string, string, int, error) {
+		return "", "", 0, nil
+	}
+
+	remote, err := f.PushFile("/tmp/photo.jpg", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if remote != "/sdcard/Download/photo.jpg" {
+		t.Fatalf("remote = %q", remote)
+	}
+	// mkdir -p ran for the destination before the push. (The fake's first
+	// command is the defaultUploadDir probe, which is expected.)
+	mkdir, push := -1, -1
+	for i, c := range f.commands {
+		switch {
+		case strings.Contains(c, "mkdir -p '/sdcard/Download/'"):
+			mkdir = i
+		case strings.Contains(c, "push /tmp/photo.jpg /sdcard/Download/"):
+			push = i
+		}
+	}
+	if mkdir == -1 || push == -1 || mkdir > push {
+		t.Fatalf("commands = %v, want mkdir before push", f.commands)
+	}
+}
+
+func TestPushFileRefusesADestinedPathOutsideTheWhitelist(t *testing.T) {
+	f := newFakeADB(func(string) (string, error) { return "", nil })
+	if _, err := f.PushFile("/tmp/x", "/data/local"); !errors.Is(err, model.ErrBadDevicePath) {
+		t.Fatalf("err = %v", err)
+	}
+	if len(f.commands) != 0 {
+		t.Fatalf("commands ran: %v", f.commands)
+	}
+}
+
+func TestPullFileChecksThePath(t *testing.T) {
+	f := newFakeADB(func(string) (string, error) { return "", nil })
+	if _, err := f.PullFile("/etc/passwd", t.TempDir()); !errors.Is(err, model.ErrBadDevicePath) {
+		t.Fatalf("err = %v", err)
+	}
+	if len(f.commands) != 0 {
+		t.Fatalf("commands ran: %v", f.commands)
+	}
+}
+
+func TestDeviceDirsOnlyReportsWhatExists(t *testing.T) {
+	f := newFakeADB(func(cmd string) (string, error) {
+		if strings.Contains(cmd, "/sdcard/Download") || strings.Contains(cmd, "/sdcard/DCIM/Camera") {
+			return "yes", nil
+		}
+		return "", errors.New("missing")
+	})
+	dirs := f.DeviceDirs()
+	if len(dirs) != 2 || dirs[0].Name != "Download" || dirs[1].Name != "相机" {
+		t.Fatalf("dirs = %+v", dirs)
+	}
+}
+
+func TestFreeSpaceOnDeviceReadsTheDfOutput(t *testing.T) {
+	f := newFakeADB(func(cmd string) (string, error) {
+		return "/dev/block/dfu 107G 49G 58G 46% /data/media", nil
+	})
+	if got := f.FreeSpaceOnDevice(); got != "58G" {
+		t.Fatalf("free = %q, want 58G", got)
+	}
+}
+
+func TestADBReportsStderrFailuresWrappedInZeroExit(t *testing.T) {
+	f := &ADB{path: "/fake/adb", looked: true}
+	f.runHook = func(time.Duration, []string) (string, string, int, error) {
+		return "", "error: device unauthorized.\n", 0, nil
+	}
+	if _, _, code, err := f.Run(time.Second, "devices"); code != 1 || err == nil {
+		t.Fatalf("code=%d err=%v, want 1 + error", code, err)
+	}
+}
+
+func TestADBWithoutBinaryFailsFast(t *testing.T) {
+	f := &ADB{path: "", looked: true}
+	if _, _, _, err := f.Run(time.Second, "devices"); !errors.Is(err, ErrNoADB) {
+		t.Fatalf("err = %v, want ErrNoADB", err)
+	}
+}

@@ -15,7 +15,7 @@ import (
 // shellQuote makes a path safe to interpolate into a device shell command.
 //
 // The shell on the device is busybox/toybox `sh`, so a single-quoted string
-// with embedded quotes escaped as '\'' is the portable form.
+// with embedded quotes escaped as '\” is the portable form.
 func shellQuote(s string) string {
 	return "'" + strings.ReplaceAll(s, "'", `'\''`) + "'"
 }
@@ -50,7 +50,7 @@ func CheckDevicePath(p string) error {
 // One shell invocation covers the whole directory: adb process spawn costs
 // tens of milliseconds, so a per-file stat turns a 200-file folder into a
 // ten-second wait.
-func ListDir(dir string) ([]model.Entry, error) {
+func (a *ADB) ListDir(dir string) ([]model.Entry, error) {
 	if dir == "" {
 		dir = "/sdcard"
 	}
@@ -63,7 +63,7 @@ func ListDir(dir string) ([]model.Entry, error) {
 		`for f in %s/*; do [ -e "$f" ] && stat -c '%%f|%%s|%%Y|%%n' "$f" 2>/dev/null; done`,
 		q)
 
-	out, err := Default.Shell(25*time.Second, cmd)
+	out, err := a.Shell(25*time.Second, cmd)
 	if err != nil {
 		return nil, err
 	}
@@ -129,9 +129,9 @@ func baseName(p string) string {
 }
 
 // PushFile copies a local file onto the device. Returns the device path.
-func PushFile(local, remoteDir string) (string, error) {
+func (a *ADB) PushFile(local, remoteDir string) (string, error) {
 	if remoteDir == "" {
-		remoteDir = defaultUploadDir()
+		remoteDir = a.defaultUploadDir()
 	}
 	if err := CheckDevicePath(remoteDir); err != nil {
 		return "", err
@@ -141,10 +141,10 @@ func PushFile(local, remoteDir string) (string, error) {
 		remoteDir += "/"
 	}
 	// A missing destination directory fails the push outright.
-	if _, err := Default.Shell(10*time.Second, "mkdir -p "+shellQuote(remoteDir)); err != nil {
+	if _, err := a.Shell(10*time.Second, "mkdir -p "+shellQuote(remoteDir)); err != nil {
 		return "", err
 	}
-	_, errOut, code, err := Default.Run(30*time.Minute, "push", local, remoteDir)
+	_, errOut, code, err := a.Run(30*time.Minute, "push", local, remoteDir)
 	if err != nil {
 		return "", err
 	}
@@ -155,14 +155,14 @@ func PushFile(local, remoteDir string) (string, error) {
 }
 
 // PullFile copies a device file into a local directory.
-func PullFile(remote, localDir string) (string, error) {
+func (a *ADB) PullFile(remote, localDir string) (string, error) {
 	if err := CheckDevicePath(remote); err != nil {
 		return "", err
 	}
 	if localDir == "" {
 		localDir = "."
 	}
-	_, errOut, code, err := Default.Run(30*time.Minute, "pull", remote, localDir)
+	_, errOut, code, err := a.Run(30*time.Minute, "pull", remote, localDir)
 	if err != nil {
 		return "", err
 	}
@@ -173,17 +173,17 @@ func PullFile(remote, localDir string) (string, error) {
 }
 
 // DeletePath removes a file or directory on the device.
-func DeletePath(remote string) error {
+func (a *ADB) DeletePath(remote string) error {
 	if err := CheckDevicePath(remote); err != nil {
 		return err
 	}
-	_, err := Default.Shell(20*time.Second, "rm -rf "+shellQuote(remote))
+	_, err := a.Shell(20*time.Second, "rm -rf "+shellQuote(remote))
 	return err
 }
 
 // DeviceDirs are the places people actually put things, in the order worth
 // offering. Only ones that exist on the device are returned.
-func DeviceDirs() []model.Entry {
+func (a *ADB) DeviceDirs() []model.Entry {
 	candidates := []struct{ name, path string }{
 		{"Download", "/sdcard/Download"},
 		{"相机", "/sdcard/DCIM/Camera"},
@@ -194,7 +194,7 @@ func DeviceDirs() []model.Entry {
 	}
 	out := make([]model.Entry, 0, len(candidates))
 	for _, c := range candidates {
-		if _, err := Default.Shell(8*time.Second, "test -d "+shellQuote(c.path)+" && echo yes"); err == nil {
+		if _, err := a.Shell(8*time.Second, "test -d "+shellQuote(c.path)+" && echo yes"); err == nil {
 			out = append(out, model.Entry{Name: c.name, Path: c.path, Dir: true})
 		}
 	}
@@ -204,9 +204,9 @@ func DeviceDirs() []model.Entry {
 // defaultUploadDir picks somewhere that exists to receive a pushed file.
 // /sdcard/Documents is missing on many devices, and a push into a path that
 // doesn't exist fails rather than creating it.
-func defaultUploadDir() string {
+func (a *ADB) defaultUploadDir() string {
 	for _, p := range []string{"/sdcard/Download", "/sdcard/Documents", "/sdcard"} {
-		if _, err := Default.Shell(8*time.Second, "test -d "+shellQuote(p)+" && echo yes"); err == nil {
+		if _, err := a.Shell(8*time.Second, "test -d "+shellQuote(p)+" && echo yes"); err == nil {
 			return p
 		}
 	}
@@ -214,8 +214,8 @@ func defaultUploadDir() string {
 }
 
 // FreeSpaceOnDevice reports the phone's free storage, for the status line.
-func FreeSpaceOnDevice() string {
-	out, err := Default.Shell(10*time.Second, "df -h /sdcard")
+func (a *ADB) FreeSpaceOnDevice() string {
+	out, err := a.Shell(10*time.Second, "df -h /sdcard")
 	if err != nil {
 		return ""
 	}
@@ -229,3 +229,17 @@ func FreeSpaceOnDevice() string {
 	}
 	return ""
 }
+
+// Package-level forms operate on Default, the process-wide adb handle.
+
+func ListDir(dir string) ([]model.Entry, error) { return Default.ListDir(dir) }
+
+func PushFile(local, remoteDir string) (string, error) { return Default.PushFile(local, remoteDir) }
+
+func PullFile(remote, localDir string) (string, error) { return Default.PullFile(remote, localDir) }
+
+func DeletePath(remote string) error { return Default.DeletePath(remote) }
+
+func DeviceDirs() []model.Entry { return Default.DeviceDirs() }
+
+func FreeSpaceOnDevice() string { return Default.FreeSpaceOnDevice() }
