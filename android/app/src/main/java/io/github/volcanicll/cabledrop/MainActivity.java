@@ -76,6 +76,16 @@ public class MainActivity extends Activity {
         WebSettings s = web.getSettings();
         s.setJavaScriptEnabled(true);
         s.setDomStorageEnabled(true);
+        // File and content access must be on for uploads to work. Since
+        // targetSdk 30, setAllowFileAccess() defaults to false, and the file
+        // picker hands back URIs — file:// from some pickers, content:// from
+        // DocumentsUI — that the WebView itself has to read when it builds the
+        // upload's FormData. With either switch off the page learns the file's
+        // name but not its contents, and the upload dies before a byte moves.
+        // The page is our own loopback content, so nothing here widens the
+        // attack surface.
+        s.setAllowFileAccess(true);
+        s.setAllowContentAccess(true);
         // Debug builds get a DevTools socket so the page can be inspected on a
         // real phone (`adb forward` the webview_devtools_remote socket, then
         // chrome://inspect). Release builds do not: an open debugging port on
@@ -117,6 +127,11 @@ public class MainActivity extends Activity {
         web.setWebChromeClient(new WebChromeClient() {
             // The upload input on the page is a plain <input type=file>; this
             // is what turns a tap on it into a real Android file picker.
+            //
+            // The callback must be settled no matter what. A picker that never
+            // opens (no handler for the intent) leaves filePick set with
+            // nothing coming back through onActivityResult, and the page's
+            // input stays locked waiting for a result that never arrives.
             @Override
             public boolean onShowFileChooser(WebView view, ValueCallback<Uri[]> callback,
                                              FileChooserParams params) {
@@ -127,7 +142,23 @@ public class MainActivity extends Activity {
                 try {
                     startActivityForResult(params.createIntent(), FILE_CHOOSER);
                     return true;
+                } catch (android.content.ActivityNotFoundException e) {
+                    // Some ROMs ship no default handler for the bare
+                    // createIntent() form; a chooser over the same intent
+                    // still finds one. This must not recurse: try the chooser
+                    // once, then give up for good.
+                    try {
+                        startActivityForResult(
+                                Intent.createChooser(params.createIntent(), "选择文件"),
+                                FILE_CHOOSER);
+                        return true;
+                    } catch (Exception e2) {
+                        filePick.onReceiveValue(null);
+                        filePick = null;
+                        return false;
+                    }
                 } catch (Exception e) {
+                    filePick.onReceiveValue(null);
                     filePick = null;
                     return false;
                 }
