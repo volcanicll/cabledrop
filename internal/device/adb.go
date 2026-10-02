@@ -267,17 +267,23 @@ func (a *ADB) FirstDevice() (model.Device, error) {
 }
 
 // deviceMarketName asks the phone for its human-facing model name, preferring
-// the marketing name ("一加 12", "Pixel 8 Pro") over the machine model code
-// ("DT2002C"). Four properties answer in a single shell call, in order of how
+// the marketing name ("一加 12", "坚果 R2") over the machine model code
+// ("DT2002C"). The properties answer in a single shell call, in order of how
 // presentable they are; the first usable one wins.
 //
 // Vendors disagree about which property carries the name — a plain phone has
 // ro.product.model, some ROMs only fill the odm/vendor copy, and system-image
 // leftovers ("qssi system image for arm64") are worse than no name at all, so
-// those are filtered out.
+// those are filtered out. net.devicename sits between the two: it is not the
+// vendor's marketing string, but it is the name the device calls itself
+// (Settings → About → Device name), which beats a model code every time. On
+// the Smartisan ROM this was developed against, ro.product.model is empty and
+// ro.product.odm.model is the bare code "DT2002C", while net.devicename
+// carries "坚果 R2".
 func (a *ADB) deviceMarketName() string {
 	out, err := a.Shell(4*time.Second, strings.Join([]string{
 		"getprop ro.product.marketname",
+		"getprop net.devicename",
 		"getprop ro.product.model",
 		"getprop ro.product.odm.model",
 		"getprop ro.product.vendor.model",
