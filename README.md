@@ -22,8 +22,8 @@
 
 | | |
 |---|---|
-| ![](docs/panel-light.png) | ![](docs/phone-dark.png) |
-| **Desktop panel** — macOS menu bar, 380×540 | **Phone page** — opens in any mobile browser |
+| <img src="docs/panel-light.png" width="330" alt="CableDrop desktop panel"> | <img src="docs/phone-dark.png" width="250" alt="CableDrop phone page, full page"> |
+| **Desktop panel** — macOS menu bar, 380×540 | **Phone page** — full page, opens in any mobile browser |
 
 - **Files, both directions.** Drag onto the panel or pick files to send; browse the phone's storage and pull anything back. The shared folder on the computer is a full file browser on the phone, subfolders included.
 - **Clipboard, both directions.** Copy on the computer, tap to copy on the phone. Paste text on the phone, it lands in the computer's clipboard. A separate note slot sends text without clobbering your clipboard.
