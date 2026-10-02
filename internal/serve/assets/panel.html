@@ -40,8 +40,8 @@
   <header class="topbar">
     <span class="chip dev-glyph" id="devGlyph" aria-hidden="true"><svg class="ic"><use href="#i-phone"/></svg></span>
     <div class="status">
-      <span class="status-name" id="devName">正在检测…</span>
-      <span class="status-sub" id="devSub"><span class="dot"></span>插上 USB 线，手机选「传输文件」</span>
+      <span class="status-name" id="devName" data-i18n="panel.detecting"></span>
+      <span class="status-sub" id="devSub"></span>
     </div>
     <div class="link-diagram" id="linkDiagram" aria-hidden="true">
       <span class="ld-item"><svg class="ic"><use href="#i-laptop"/></svg><span>Mac</span></span>
@@ -50,10 +50,10 @@
       <span class="ld-line"></span>
       <span class="ld-item"><svg class="ic"><use href="#i-phone"/></svg><span>Android</span></span>
     </div>
-    <button class="icon-btn" id="refresh" title="重新检测手机" aria-label="重新检测手机">
+    <button class="icon-btn" id="refresh" data-i18n-title="panel.refresh" data-i18n-aria="panel.refresh">
       <svg class="ic"><use href="#i-refresh"/></svg>
     </button>
-    <button class="icon-btn" id="panelClose" title="关闭面板（Esc，点击面板外也可关闭）" aria-label="关闭面板">
+    <button class="icon-btn" id="panelClose" data-i18n-title="panel.closeTitle" data-i18n-aria="panel.close">
       <svg class="ic"><use href="#i-x"/></svg>
     </button>
   </header>
@@ -81,29 +81,29 @@
           <span class="drop-zone">
             <span class="chip tile-glyph"><svg class="ic"><use href="#i-up"/></svg></span>
             <span class="tile-text">
-              <span class="tile-title">发送文件</span>
-              <span class="tile-sub">拖入文件或文件夹</span>
+              <span class="tile-title" data-i18n="panel.send.title"></span>
+              <span class="tile-sub" data-i18n="panel.send.sub"></span>
             </span>
           </span>
-          <span class="tile-micro">支持多文件 · 文件夹 · 大文件</span>
-          <span class="drop-tag" hidden>松开即可发送到手机</span>
+          <span class="tile-micro" data-i18n="panel.send.micro"></span>
+          <span class="drop-tag" hidden data-i18n="panel.drop.tag"></span>
         </button>
 
         <button class="tile" id="tFiles">
           <span class="chip tile-glyph glyph-ok"><svg class="ic"><use href="#i-folder"/></svg></span>
           <span class="tile-text">
-            <span class="tile-title">手机文件<span class="chev"><svg class="ic sm-ic"><use href="#i-chev-r"/></svg></span></span>
-            <span class="tile-sub">浏览并取回文件</span>
-            <span class="tile-micro">查看手机存储 · 下载到 Mac</span>
+            <span class="tile-title"><span data-i18n="panel.files.title"></span><span class="chev"><svg class="ic sm-ic"><use href="#i-chev-r"/></svg></span></span>
+            <span class="tile-sub" data-i18n="panel.files.sub"></span>
+            <span class="tile-micro" data-i18n="panel.files.micro"></span>
           </span>
         </button>
 
         <div class="tile" id="tText" role="button" tabindex="0">
           <span class="chip tile-glyph glyph-purple"><svg class="ic"><use href="#i-clip"/></svg></span>
           <span class="tile-text">
-            <span class="tile-title">剪贴板<span class="chev"><svg class="ic sm-ic"><use href="#i-chev-r"/></svg></span></span>
-            <span class="tile-sub">Mac ↔ Android 双向复制</span>
-            <span class="tile-micro"><span class="pill-purple">支持独立便签</span></span>
+            <span class="tile-title"><span data-i18n="panel.text.title"></span><span class="chev"><svg class="ic sm-ic"><use href="#i-chev-r"/></svg></span></span>
+            <span class="tile-sub" data-i18n="panel.text.sub"></span>
+            <span class="tile-micro"><span class="pill-purple" data-i18n="panel.text.micro"></span></span>
           </span>
         </div>
 
@@ -111,13 +111,13 @@
           <span class="stack-top">
             <span class="chip tile-glyph"><svg class="ic"><use href="#i-globe"/></svg></span>
             <span class="tile-text">
-              <span class="tile-title">手机网页<span class="chev"><svg class="ic sm-ic"><use href="#i-chev-r"/></svg></span></span>
-              <span class="tile-sub" id="serveSub">在手机浏览器中打开 CableDrop</span>
+              <span class="tile-title"><span data-i18n="panel.serve.title"></span><span class="chev"><svg class="ic sm-ic"><use href="#i-chev-r"/></svg></span></span>
+              <span class="tile-sub" id="serveSub" data-i18n="panel.serve.sub"></span>
             </span>
           </span>
           <span class="url-row">
             <span class="url-box selectable" id="serveURL">localhost:8765</span>
-            <button class="btn-copy" id="copyURL" title="复制手机网页地址">复制</button>
+            <button class="btn-copy" id="copyURL" data-i18n="common.copy" data-i18n-title="panel.serve.copyTitle"></button>
           </span>
         </div>
       </div>
@@ -125,29 +125,29 @@
       <div class="card row dest-row">
         <span class="chip tile-glyph glyph-blue"><svg class="ic"><use href="#i-folder"/></svg></span>
         <span class="row-main">
-          <span class="row-title">文件保存位置</span>
+          <span class="row-title" data-i18n="panel.dest.title"></span>
           <span class="dest-path selectable" id="dirPath">—</span>
-          <span class="dest-note">手机取回到 Mac 的文件会保存到这里</span>
+          <span class="dest-note" data-i18n="panel.dest.note"></span>
         </span>
         <span class="row-actions">
-          <button class="btn-outline" id="openDir">打开</button>
-          <button class="btn-outline" id="changeDir">更改</button>
+          <button class="btn-outline" id="openDir" data-i18n="panel.dest.open"></button>
+          <button class="btn-outline" id="changeDir" data-i18n="panel.dest.change"></button>
         </span>
       </div>
 
       <section class="group">
         <div class="group-head">
-          <h2>最近传输</h2>
+          <h2 data-i18n="panel.tx.title"></h2>
           <span class="head-links">
             <button class="link" id="toggleTx" hidden></button>
-            <button class="link" id="clearTx" hidden>清除</button>
+            <button class="link" id="clearTx" hidden data-i18n="panel.tx.clear"></button>
           </span>
         </div>
         <div class="card" id="txCard">
           <div class="empty">
             <svg class="ic"><use href="#i-send"/></svg>
-            <span class="empty-title">还没有传输记录</span>
-            <span class="empty-hint">拖文件到这里，或点「发送文件」</span>
+            <span class="empty-title" data-i18n="panel.tx.emptyTitle"></span>
+            <span class="empty-hint" data-i18n="panel.tx.emptyHint"></span>
           </div>
         </div>
       </section>
@@ -157,49 +157,49 @@
     <section id="v-files" class="view" hidden>
       <div class="card row bar-row">
         <button class="back" id="filesBack">
-          <svg class="ic sm-ic"><use href="#i-chev"/></svg>返回
+          <svg class="ic sm-ic"><use href="#i-chev"/></svg><span data-i18n="common.back"></span>
         </button>
         <span class="crumb selectable" id="filesPath">/sdcard</span>
-        <button class="icon-btn" id="filesUp" title="上级目录" aria-label="上级目录">
+        <button class="icon-btn" id="filesUp" data-i18n-title="panel.files.up" data-i18n-aria="panel.files.up">
           <svg class="ic"><use href="#i-up"/></svg>
         </button>
       </div>
       <div class="card" id="filesList">
-        <div class="empty"><span class="empty-title">读取中…</span></div>
+        <div class="empty"><span class="empty-title" data-i18n="common.loading"></span></div>
       </div>
-      <p class="hint">点文件夹进入 · 点文件存到 Mac</p>
+      <p class="hint" data-i18n="panel.files.hint"></p>
     </section>
 
     <!-- ============ text ============ -->
     <section id="v-text" class="view" hidden>
       <div class="card row bar-row">
         <button class="back" id="textBack">
-          <svg class="ic sm-ic"><use href="#i-chev"/></svg>返回
+          <svg class="ic sm-ic"><use href="#i-chev"/></svg><span data-i18n="common.back"></span>
         </button>
-        <span class="crumb">剪贴板与便签</span>
+        <span class="crumb" data-i18n="panel.text.crumb"></span>
       </div>
 
       <section class="group">
-        <div class="group-head"><h2>发到手机</h2></div>
-        <textarea id="textOut" placeholder="在这里粘贴或输入文本，点「发送到手机」&#10;手机上打开网页后即可一键复制" spellcheck="false"></textarea>
+        <div class="group-head"><h2 data-i18n="panel.text.sendTitle"></h2></div>
+        <textarea id="textOut" placeholder="" data-i18n-ph="panel.text.placeholder" spellcheck="false"></textarea>
         <div class="btn-row">
           <button class="btn ghost" id="useClip">
-            <svg class="ic sm-ic"><use href="#i-clip"/></svg>用当前剪贴板
+            <svg class="ic sm-ic"><use href="#i-clip"/></svg><span data-i18n="panel.text.useClip"></span>
           </button>
           <button class="btn" id="sendText">
-            <svg class="ic sm-ic"><use href="#i-send"/></svg>发送到手机
+            <svg class="ic sm-ic"><use href="#i-send"/></svg><span data-i18n="panel.text.send"></span>
           </button>
         </div>
-        <p class="hint" id="textHint" role="status">发送后，在手机网页顶部就能看到并复制。</p>
+        <p class="hint" id="textHint" role="status" data-i18n="panel.text.hint"></p>
       </section>
 
       <section class="group">
         <div class="group-head">
-          <h2>电脑剪贴板</h2>
-          <button class="link" id="copyClip">复制</button>
+          <h2 data-i18n="panel.text.clipTitle"></h2>
+          <button class="link" id="copyClip" data-i18n="common.copy"></button>
         </div>
-        <div class="note-box selectable" id="clipView">（空）</div>
-        <p class="hint">手机网页会读到这段内容，点一下就能复制进手机。</p>
+        <div class="note-box selectable" id="clipView" data-i18n="common.empty"></div>
+        <p class="hint" data-i18n="panel.text.clipHint"></p>
       </section>
     </section>
 
@@ -208,12 +208,16 @@
   <footer class="trust">
     <span class="trust-left">
       <svg class="ic"><use href="#i-shield"/></svg>
-      <span>USB 直连 · 数据不经过网络或云端</span>
+      <span data-i18n="panel.trust"></span>
     </span>
-    <span class="trust-right">安全 · 私密 · 无需安装 App</span>
+    <span class="trust-right">
+      <span data-i18n="panel.trustRight"></span>
+      <button class="lang-btn" data-i18n-toggle data-i18n-title="common.langTitle" data-i18n-aria="common.langTitle"></button>
+    </span>
   </footer>
 </div>
 
+<script src="js/i18n.js"></script>
 <script src="js/api.js"></script>
 <script src="js/panel.js"></script>
 </body>

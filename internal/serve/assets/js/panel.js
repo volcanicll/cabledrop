@@ -1,4 +1,4 @@
-/* CableDrop — desktop panel. Uses the shared helpers in api.js. */
+/* CableDrop — desktop panel. Uses the shared helpers in api.js and i18n.js. */
 
 function shortPath(p) {
   // Home-relative paths are far easier to read in a 500px panel.
@@ -37,13 +37,13 @@ function fmtFree(s) {
 function relTime(at) {
   if (!at) return '';
   const s = Math.max(0, Date.now() / 1000 - at);
-  if (s < 45) return '刚刚';
-  if (s < 3600) return Math.round(s / 60) + ' 分钟前';
-  if (s < 86400) return Math.round(s / 3600) + ' 小时前';
-  if (s < 172800) return '昨天';
-  if (s < 604800) return Math.round(s / 86400) + ' 天前';
+  if (s < 45) return t('panel.time.justNow');
+  if (s < 3600) return t('panel.time.minAgo', { n: Math.round(s / 60) });
+  if (s < 86400) return t('panel.time.hourAgo', { n: Math.round(s / 3600) });
+  if (s < 172800) return t('panel.time.yesterday');
+  if (s < 604800) return t('panel.time.dayAgo', { n: Math.round(s / 86400) });
   const d = new Date(at * 1000);
-  return (d.getMonth() + 1) + ' 月 ' + d.getDate() + ' 日';
+  return t('panel.time.date', { m: d.getMonth() + 1, d: d.getDate() });
 }
 
 function elapsedText(startedAt) {
@@ -72,24 +72,21 @@ function render(s) {
   glyph.classList.toggle('off', !on);
   const name = $('devName');
   if (!s.adbFound) {
-    name.textContent = '未找到 adb';
+    name.textContent = t('panel.dev.noAdb');
     name.classList.add('off');
     name.title = '';
   } else if (on) {
-    name.textContent = s.device || '已连接手机';
+    name.textContent = s.device || t('panel.dev.connected');
     name.classList.remove('off');
     // The serial is secondary information: useful when two identical phones
     // are around, never worth a line of its own.
-    name.title = s.serial ? '序列号 ' + s.serial : '';
+    name.title = s.serial ? t('panel.dev.serial', { serial: s.serial }) : '';
   } else {
-    name.textContent = '未连接手机';
+    name.textContent = t('panel.dev.disconnected');
     name.classList.add('off');
     name.title = '';
   }
-  $('devSub').innerHTML = !s.adbFound
-    ? '请安装 Android Platform Tools'
-    : on ? `<span class="dot on"></span>USB 已连接` + (s.storageFree ? ` · ${esc(fmtFree(s.storageFree))} 可用` : '')
-         : `<span class="dot"></span>插上 USB 线，手机选「传输文件」`;
+  renderSub(s);
 
   // The diagram dims when the link is down; refresh/close keep a
   // deliberately lower visual weight than the device identity.
@@ -121,6 +118,21 @@ function render(s) {
   renderTransfers(s.transfers || [], s.error || (view === 'home' && !s.adbFound) ? 2 : TX_VISIBLE);
 }
 
+// The subtitle under the device name. A function of the state alone, so the
+// pre-poll boot, every poll and a language switch all land on the same words.
+function renderSub(s) {
+  const el = $('devSub');
+  if (s && !s.adbFound) {
+    el.textContent = t('panel.dev.installAdb');
+  } else if (s && s.connected) {
+    el.innerHTML = '<span class="dot on"></span>' + esc(s.storageFree
+      ? t('panel.dev.connectedFree', { free: fmtFree(s.storageFree) })
+      : t('panel.dev.usbConnected'));
+  } else {
+    el.innerHTML = '<span class="dot"></span>' + esc(t('panel.sub.unplugged'));
+  }
+}
+
 /* ---------------- error card ---------------- */
 
 function renderError(s) {
@@ -128,11 +140,11 @@ function renderError(s) {
   let msg = s.error;
 
   if (!msg && view === 'home' && !s.adbFound) {
-    msg = '没有找到 adb\n安装 Android Platform Tools，或运行 brew install android-platform-tools';
+    msg = t('panel.error.noAdb');
   }
   // Every card that appears here describes a state a refresh may clear, so
   // each one carries the retry action.
-  const action = msg ? '重试' : null;
+  const action = msg ? t('common.retry') : null;
 
   if (!msg) {
     box.hidden = true;
@@ -148,7 +160,7 @@ function renderError(s) {
   const next = `<div class="error-card" role="alert">
     <svg class="ic"><use href="#i-alert"/></svg>
     <span class="error-body">${head}${detail}</span>
-    ${action ? `<button class="btn sm ghost" id="errorRetry">${action}</button>` : ''}
+    ${action ? `<button class="btn sm ghost" id="errorRetry">${esc(action)}</button>` : ''}
   </div>`;
   if (box.dataset.sig !== next) {
     box.dataset.sig = next;
@@ -173,16 +185,16 @@ const TX_VISIBLE = 3;
 let txExpanded = false;
 let txCap = TX_VISIBLE;
 
-function relTimeKey(t) {
+function relTimeKey(at) {
   // Relative time moves without a state change; bucket it so the row only
   // re-patches when the displayed string actually changes.
-  return Math.floor((Date.now() / 1000 - t) / 60);
+  return Math.floor((Date.now() / 1000 - at) / 60);
 }
 
-function txSig(t) {
-  return [t.state, t.detail || '', t.percent ?? '', t.indeterminate ? 1 : 0,
-          t.indeterminate ? elapsedText(t.startedAt) : '', t.size ?? '',
-          relTimeKey(t.at)].join('|');
+function txSig(tr) {
+  return [tr.state, tr.detail || '', tr.percent ?? '', tr.indeterminate ? 1 : 0,
+          tr.indeterminate ? elapsedText(tr.startedAt) : '', tr.size ?? '',
+          relTimeKey(tr.at)].join('|');
 }
 
 function renderTransfers(tx, cap) {
@@ -197,8 +209,8 @@ function renderTransfers(tx, cap) {
     if (!card.querySelector('.empty')) {
       card.innerHTML = `<div class="empty">
         <svg class="ic"><use href="#i-send"/></svg>
-        <span class="empty-title">还没有传输记录</span>
-        <span class="empty-hint">拖文件到这里，或点「发送文件」</span>
+        <span class="empty-title">${esc(t('panel.tx.emptyTitle'))}</span>
+        <span class="empty-hint">${esc(t('panel.tx.emptyHint'))}</span>
       </div>`;
     }
     clearBtn.hidden = true;
@@ -212,12 +224,12 @@ function renderTransfers(tx, cap) {
   const shown = tx.slice(0, visible);
 
   let ref = card.firstElementChild;
-  for (const t of shown) {
-    let rec = txRows.get(t.id);
+  for (const tr of shown) {
+    let rec = txRows.get(tr.id);
     if (!rec) {
       const el = document.createElement('div');
       el.className = 'tx';
-      el.dataset.txId = t.id;
+      el.dataset.txId = tr.id;
       el.innerHTML = `<span class="tx-chip"><svg class="ic"><use href="#i-up"/></svg></span>
         <span class="tx-main">
           <span class="tx-name"></span>
@@ -229,11 +241,11 @@ function renderTransfers(tx, cap) {
         </span>
         <span class="tx-state"></span>
         <span class="tx-chev"><svg class="ic"><use href="#i-chev-r"/></svg></span>`;
-      txRows.set(t.id, rec = { el, sig: '' });
+      txRows.set(tr.id, rec = { el, sig: '' });
     }
-    const sig = txSig(t);
+    const sig = txSig(tr);
     if (rec.sig !== sig) {
-      patchTxRow(rec.el, t);
+      patchTxRow(rec.el, tr);
       rec.sig = sig;
     }
     if (rec.el === ref) {
@@ -250,61 +262,65 @@ function renderTransfers(tx, cap) {
     ref = next;
   }
 
-  clearBtn.hidden = !tx.some((t) => t.state !== 'running');
+  clearBtn.hidden = !tx.some((tr) => tr.state !== 'running');
   if (tx.length > txCap) {
     toggleBtn.hidden = false;
-    toggleBtn.textContent = txExpanded ? '收起' : `查看全部 ${tx.length}`;
+    toggleBtn.textContent = txExpanded ? t('panel.tx.collapse')
+      : t('panel.tx.showAll', { n: tx.length });
   } else {
     toggleBtn.hidden = true;
   }
 }
 
-function patchTxRow(el, t) {
+function patchTxRow(el, tr) {
   // Direction decides the chip; state decides the icon inside it.
-  const dirClass = t.kind === 'push' ? 'push' : 'pull';
+  const dirClass = tr.kind === 'push' ? 'push' : 'pull';
   const chip = el.querySelector('.tx-chip');
-  const icon = t.state === 'running' ? 'i-refresh'
-    : t.state === 'failed' ? 'i-alert'
-    : t.kind === 'push' ? 'i-up' : 'i-down';
-  chip.className = 'tx-chip ' + (t.state === 'failed' ? 'failed' : dirClass + (t.state === 'running' ? ' running' : ''));
+  const icon = tr.state === 'running' ? 'i-refresh'
+    : tr.state === 'failed' ? 'i-alert'
+    : tr.kind === 'push' ? 'i-up' : 'i-down';
+  chip.className = 'tx-chip ' + (tr.state === 'failed' ? 'failed' : dirClass + (tr.state === 'running' ? ' running' : ''));
   chip.innerHTML = `<svg class="ic"><use href="#${icon}"/></svg>`;
 
-  el.querySelector('.tx-name').textContent = t.name;
+  el.querySelector('.tx-name').textContent = tr.name;
 
   // Sub line: what happened and where, in that order. Failed rows show the
   // human-readable first line of the error instead.
   const sub = el.querySelector('.tx-sub');
-  if (t.state === 'failed' && t.detail) {
-    sub.textContent = t.detail.split('\n')[0];
-  } else if (t.state === 'running' && t.percent == null) {
-    sub.textContent = (t.kind === 'push' ? '发送中' : '接收中') + ' · 已用 ' + elapsedText(t.startedAt);
+  if (tr.state === 'failed' && tr.detail) {
+    sub.textContent = tr.detail.split('\n')[0];
+  } else if (tr.state === 'running' && tr.percent == null) {
+    sub.textContent = tr.kind === 'push'
+      ? t('panel.tx.pushingElapsed', { t: elapsedText(tr.startedAt) })
+      : t('panel.tx.pullingElapsed', { t: elapsedText(tr.startedAt) });
   } else {
-    sub.textContent = t.detail || (t.kind === 'push' ? '发送到手机' : '从手机取回');
+    sub.textContent = tr.detail || (tr.kind === 'push' ? t('panel.tx.toPhone') : t('panel.tx.fromPhone'));
   }
 
-  el.querySelector('.tx-size').textContent = t.size ? sizeText(t.size) : '';
+  el.querySelector('.tx-size').textContent = tr.size ? sizeText(tr.size) : '';
 
   const time = el.querySelector('.tx-time');
-  time.textContent = t.state === 'running' && t.indeterminate
-    ? '已用 ' + elapsedText(t.startedAt) : relTime(t.at);
-  if (t.state === 'running' && t.indeterminate) time.textContent = '';
+  time.textContent = relTime(tr.at);
+  // An indeterminate run already shows its elapsed time in the sub line; the
+  // time cell would only repeat it.
+  if (tr.state === 'running' && tr.indeterminate) time.textContent = '';
 
   const state = el.querySelector('.tx-state');
-  if (t.state === 'running') {
-    if (t.percent != null) {
+  if (tr.state === 'running') {
+    if (tr.percent != null) {
       // Bar leads, the number annotates it — the eye reads progress first.
       state.innerHTML = `<span class="tx-bar"><i></i></span>
-        <span class="tx-pct">${Math.round(t.percent)}%</span>`;
+        <span class="tx-pct">${Math.round(tr.percent)}%</span>`;
       state.querySelector('.tx-bar i').style.width =
-        Math.max(4, Math.min(100, t.percent)) + '%';
+        Math.max(4, Math.min(100, tr.percent)) + '%';
     } else {
       state.innerHTML = `<span class="tx-bar indet"><i></i></span>
-        <span class="tx-pct">传输中</span>`;
+        <span class="tx-pct">${esc(t('panel.tx.transferring'))}</span>`;
     }
-  } else if (t.state === 'done') {
-    state.innerHTML = `<span class="badge done"><span class="b-dot"><svg class="ic"><use href="#i-check"/></svg></span>已完成</span>`;
-  } else if (t.state === 'failed') {
-    state.innerHTML = `<span class="badge failed"><span class="b-dot"><svg class="ic"><use href="#i-alert"/></svg></span>失败</span>`;
+  } else if (tr.state === 'done') {
+    state.innerHTML = `<span class="badge done"><span class="b-dot"><svg class="ic"><use href="#i-check"/></svg></span>${esc(t('panel.tx.done'))}</span>`;
+  } else if (tr.state === 'failed') {
+    state.innerHTML = `<span class="badge failed"><span class="b-dot"><svg class="ic"><use href="#i-alert"/></svg></span>${esc(t('panel.tx.failed'))}</span>`;
   }
 }
 
@@ -343,7 +359,7 @@ async function loadFiles(dir) {
       ? d.entries.map(fileRow).join('')
       : `<div class="empty">
            <svg class="ic"><use href="#i-folder"/></svg>
-           <span class="empty-title">（空目录）</span>
+           <span class="empty-title">${esc(t('panel.files.emptyDir'))}</span>
          </div>`;
   } catch (e) {
     $('filesList').innerHTML = `<div class="empty">${esc(e.message)}</div>`;
@@ -352,16 +368,17 @@ async function loadFiles(dir) {
 
 function fileRow(en) {
   const icon = en.dir ? 'i-folder' : 'i-doc';
-  const action = en.dir ? '' : '<span class="row-meta">取回</span>';
+  const action = en.dir ? '' : `<span class="row-meta">${esc(t('panel.files.fetch'))}</span>`;
   return `<div class="row" data-path="${esc(en.path)}" data-dir="${en.dir ? 1 : 0}">
     <svg class="ic sm-ic" style="color:${en.dir ? 'var(--accent-text)' : 'var(--text-3)'}">
       <use href="#${icon}"/></svg>
     <span class="row-main">
       <span class="row-title">${esc(en.name)}</span>
-      <span class="row-sub">${en.dir ? '文件夹' : sizeText(en.size)}</span>
+      <span class="row-sub">${en.dir ? esc(t('common.folder')) : sizeText(en.size)}</span>
     </span>
     ${action}
-    <button class="icon-btn" data-del="${esc(en.path)}" title="删除" aria-label="删除 ${esc(en.name)}">
+    <button class="icon-btn" data-del="${esc(en.path)}" title="${esc(t('panel.files.delete'))}"
+            aria-label="${esc(t('panel.files.deleteName', { name: en.name }))}">
       <svg class="ic sm-ic"><use href="#i-trash"/></svg>
     </button>
   </div>`;
@@ -372,7 +389,7 @@ function fileRow(en) {
 async function refreshClip() {
   try {
     const d = await api('/api/clip');
-    $('clipView').textContent = d.text || '（空）';
+    $('clipView').textContent = d.text || t('common.empty');
   } catch (_) { /* leave as is */ }
 }
 
@@ -437,8 +454,8 @@ $('copyURL').onclick = async (ev) => {
   try {
     await navigator.clipboard.writeText(St ? St.phoneURL : $('serveURL').textContent);
     const btn = ev.currentTarget;
-    btn.textContent = '已复制';
-    setTimeout(() => { btn.textContent = '复制'; }, 1200);
+    btn.textContent = t('common.copied');
+    setTimeout(() => { btn.textContent = t('common.copy'); }, 1200);
   } catch (_) { /* clipboard may be blocked in the webview */ }
 };
 
@@ -471,7 +488,7 @@ $('filesList').onclick = async (ev) => {
   if (del) {
     ev.stopPropagation();
     const p = del.dataset.del;
-    if (!confirm('删除「' + p.split('/').pop() + '」？此操作无法撤销。')) return;
+    if (!confirm(t('panel.confirm.delete', { name: p.split('/').pop() }))) return;
     try {
       await post('/api/device/delete', { path: p });
       loadFiles(curDir);
@@ -499,8 +516,8 @@ $('copyClip').onclick = async () => {
   const d = await api('/api/clip');
   try {
     await navigator.clipboard.writeText(d.text || '');
-    $('copyClip').textContent = '已复制';
-    setTimeout(() => { $('copyClip').textContent = '复制'; }, 1200);
+    $('copyClip').textContent = t('common.copied');
+    setTimeout(() => { $('copyClip').textContent = t('common.copy'); }, 1200);
   } catch (_) { /* clipboard may be blocked in the webview */ }
 };
 
@@ -508,9 +525,9 @@ $('sendText').onclick = async () => {
   const text = $('textOut').value;
   if (!text) return;
   await post('/api/note', { text });
-  $('textHint').textContent = '已发送 · 现在在手机上打开网页即可复制';
+  $('textHint').textContent = t('panel.text.sent');
   setTimeout(() => {
-    $('textHint').textContent = '发送后，在手机网页顶部就能看到并复制。';
+    $('textHint').textContent = t('panel.text.hint');
   }, 3000);
 };
 
@@ -524,7 +541,7 @@ let dragDepth = 0;
 let hotDrop = false;
 const overlay = document.createElement('div');
 overlay.className = 'drop-overlay';
-overlay.textContent = '松开即可发送到手机';
+overlay.textContent = t('panel.drop.tag');
 overlay.hidden = true;
 document.body.appendChild(overlay);
 
@@ -557,8 +574,30 @@ addEventListener('drop', () => {
   setHot(false);
 });
 
+/* ---------------- language ---------------- */
+
+// applyLang() repaints every string declared with data-i18n; this repaints
+// the ones this file renders from state. Rows are only patched when their
+// signature changes, so a switch drops every signature first and lets the
+// render rebuild them in the new language.
+i18nOnChange(() => {
+  if (St) {
+    const empty = $('txCard').querySelector('.empty');
+    if (empty) empty.remove();
+    for (const rec of txRows.values()) rec.sig = '';
+    render(St);
+  } else {
+    renderSub(null);
+  }
+  overlay.textContent = t('panel.drop.tag');
+  $('textHint').textContent = t('panel.text.hint');
+  if (view === 'text') refreshClip();
+  if (view === 'files') loadFiles(curDir);
+});
+
 /* ---------------- boot ---------------- */
 
+renderSub(null);
 poll(true);
 setInterval(poll, 2000);
 setInterval(() => { if (view === 'text') refreshClip(); }, 2000);

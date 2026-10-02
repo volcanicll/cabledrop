@@ -4,7 +4,7 @@
  * cable by `adb reverse`. `localhost` counts as a secure context, which is
  * what makes navigator.clipboard available here — the reason the clipboard is
  * handed over through this page instead of written by adb, which Android 10
- * and later forbid. Uses the shared helpers in api.js.
+ * and later forbid. Uses the shared helpers in api.js and i18n.js.
  */
 
 /* ---------------- toast ---------------- */
@@ -28,7 +28,7 @@ function toast(msg) {
 /* Copying needs a user gesture on iOS and some Android browsers, so every
  * copy goes through a real tap rather than happening on load. */
 async function copyText(text) {
-  if (!text) { toast('没有可复制的内容'); return; }
+  if (!text) { toast(t('phone.toast.nothingToCopy')); return; }
   let ok = true;
   try {
     await navigator.clipboard.writeText(text);
@@ -44,7 +44,7 @@ async function copyText(text) {
     try { ok = document.execCommand('copy'); } catch (_) { ok = false; }
     document.body.removeChild(ta);
   }
-  toast(ok ? '已复制到手机' : '复制失败，请长按手动选择');
+  toast(ok ? t('phone.toast.copied') : t('phone.toast.copyFailed'));
 }
 
 /* ---------------- polling ---------------- */
@@ -66,14 +66,14 @@ async function refresh() {
 
     setOnline(true);
     $('sub').textContent = st && st.device
-      ? '已连接 · ' + st.device
-      : '已连接 · 准备好接收';
+      ? t('phone.conn.connectedDevice', { device: st.device })
+      : t('phone.conn.ready');
 
     // Clipboard
     const clipText = clip.text || '';
     if (clipText !== lastClip) {
       lastClip = clipText;
-      $('clipText').textContent = clipText || '（空）';
+      $('clipText').textContent = clipText || t('common.empty');
     }
 
     // The clipboard's image, signalled by a fingerprint on /api/clip so the
@@ -139,7 +139,7 @@ function setOnline(on) {
   $('connDot').classList.toggle('on', on);
   $('connDot').classList.toggle('err', !on);
   $('offline').hidden = on;
-  if (!on) $('sub').textContent = '未连接到电脑';
+  if (!on) $('sub').textContent = t('phone.conn.offline');
 }
 
 /* ---------------- shared folder, with subfolders ---------------- */
@@ -147,7 +147,7 @@ function setOnline(on) {
 let curSub = '';
 
 function crumbFor(sub) {
-  if (!sub) return '共享目录';
+  if (!sub) return t('phone.files.rootCrumb');
   const parts = sub.split('/').filter(Boolean);
   return '… / ' + parts.slice(-2).join(' / ');
 }
@@ -166,7 +166,7 @@ async function loadFiles(sub) {
       ? d.entries.map((e) => fileItem(e, sub)).join('')
       : `<div class="empty">
            <svg class="ic"><use href="#i-folder"/></svg>
-           <span class="empty-title">这里没有文件</span>
+           <span class="empty-title">${esc(t('phone.files.emptyHere'))}</span>
          </div>`;
   } catch (e) {
     $('files').innerHTML = `<div class="empty">${esc(e.message)}</div>`;
@@ -183,7 +183,7 @@ function fileItem(e, sub) {
       <svg class="ic sm-ic" style="color:var(--accent-text)"><use href="#${icon}"/></svg>
       <span class="p-item-main">
         <span class="p-item-title">${esc(e.name)}</span>
-        <span class="p-item-sub">文件夹</span>
+        <span class="p-item-sub">${esc(t('common.folder'))}</span>
       </span>
       <svg class="ic sm-ic" style="color:var(--text-3)"><use href="#i-chev"/></svg>
     </button>`;
@@ -215,15 +215,22 @@ $('filesUp').onclick = () => {
 
 let chosen = [];
 
+// Whatever the picker holds, the pick line and the button say the same thing.
+// Shared by the picker, the end of an upload and the language switch, which
+// all three leave `chosen` in a different state.
+function syncUploadUI() {
+  $('filePickText').textContent = chosen.length
+    ? (chosen.length === 1 ? chosen[0].name : t('phone.upload.selected', { n: chosen.length }))
+    : t('phone.upload.pick');
+  $('upload').textContent = chosen.length
+    ? t('phone.upload.sendCount', { n: chosen.length })
+    : t('phone.upload.send');
+}
+
 $('fileInput').onchange = (e) => {
   chosen = Array.from(e.target.files || []);
-  $('filePickText').textContent = chosen.length
-    ? (chosen.length === 1 ? chosen[0].name : `已选 ${chosen.length} 个文件`)
-    : '选择要上传的文件';
+  syncUploadUI();
   $('upload').disabled = chosen.length === 0;
-  $('upload').textContent = chosen.length
-    ? `上传 ${chosen.length} 个文件`
-    : '上传';
 };
 
 $('upload').onclick = () => {
@@ -236,32 +243,35 @@ $('upload').onclick = () => {
   xhr.open('POST', '/upload');
   $('upProgress').hidden = false;
   $('upload').disabled = true;
+  // Everything the user picked is gone from the form by the time the UI
+  // resets, whether the upload made it or not — a stale "3 files chosen"
+  // would point at files the server never received.
   const reset = () => {
+    chosen = [];
+    $('fileInput').value = '';
     $('upProgress').hidden = true;
     $('upBar').style.width = '0%';
+    syncUploadUI();
     $('upload').disabled = false;
-    $('upload').textContent = '上传';
   };
 
   xhr.upload.onprogress = (ev) => {
     if (!ev.lengthComputable) return;
     const pct = Math.round((ev.loaded / ev.total) * 100);
     $('upBar').style.width = pct + '%';
-    $('upload').textContent = `上传中 ${pct}%`;
+    $('upload').textContent = t('phone.upload.progress', { pct });
   };
 
   xhr.onload = () => {
     reset();
-    chosen = [];
-    $('fileInput').value = '';
     if (xhr.status === 200) {
-      toast('已传到电脑');
+      toast(t('phone.toast.uploaded'));
       loadFiles(curSub);
     } else {
       // The server answers failures with a JSON error body: surface it, never
-      // a bare "上传失败" that hides whether it was a bad request or a full
-      // disk.
-      let msg = '上传失败（HTTP ' + xhr.status + '）';
+      // a bare "upload failed" that hides whether it was a bad request or a
+      // full disk.
+      let msg = t('phone.toast.uploadFailed', { code: xhr.status });
       try { msg = JSON.parse(xhr.responseText).error || msg; } catch (_) { }
       toast(msg);
     }
@@ -269,15 +279,13 @@ $('upload').onclick = () => {
 
   // A network-level failure never gets an HTTP status. Over adb reverse that
   // means either the cable/tunnel dropped, or the phone failed to read the
-  // chosen file's contents — naming both beats a bare "失败".
+  // chosen file's contents — naming both beats a bare "failed".
   const streamDied = () => {
-    reset();
     const n = chosen.length;
-    chosen = [];
-    $('fileInput').value = '';
+    reset();
     console.error('upload aborted: readyState=%d status=%d files=%d',
       xhr.readyState, xhr.status, n);
-    toast('上传失败：连接中断。请检查数据线后重试；若刚选完文件，可能是这个文件读不出来，换个文件试试');
+    toast(t('phone.toast.streamDied'));
   };
   xhr.upload.onerror = streamDied;
   xhr.onerror = streamDied;
@@ -298,18 +306,18 @@ if (!navigator.clipboard || !window.ClipboardItem) {
 }
 
 $('copyImage').onclick = async () => {
-  if (!imageBlob) { toast('没有可复制的图片'); return; }
+  if (!imageBlob) { toast(t('phone.image.nothingToCopy')); return; }
   if (!navigator.clipboard || !window.ClipboardItem) {
-    toast('这台手机的浏览器不支持复制图片，请用「分享图片」或「保存到手机」');
+    toast(t('phone.image.copyUnsupported'));
     return;
   }
   try {
     await navigator.clipboard.write([new ClipboardItem({ 'image/png': imageBlob })]);
-    toast('图片已复制到手机');
+    toast(t('phone.image.copied'));
   } catch (e) {
-    const why = (e && e.name === 'NotAllowedError') ? '没有获得剪贴板权限'
-      : (e && e.message) || '未知原因';
-    toast('复制图片失败（' + why + '），请用「分享图片」或「保存到手机」');
+    const why = (e && e.name === 'NotAllowedError') ? t('phone.image.noPermission')
+      : (e && e.message) || t('common.unknownReason');
+    toast(t('phone.image.copyFailed', { why }));
   }
 };
 
@@ -331,32 +339,32 @@ function imageFileName() {
 //   3. A named escape hatch. Whatever happens, the tap ends in something
 //      readable — a silent no-op reads as "the bridge is broken".
 $('shareImage').onclick = async () => {
-  if (!imageBlob) { toast('没有可分享的图片'); return; }
+  if (!imageBlob) { toast(t('phone.image.nothingToShare')); return; }
   const file = new File([imageBlob], imageFileName(), { type: 'image/png' });
   if (navigator.share && navigator.canShare && navigator.canShare({ files: [file] })) {
     try {
-      await navigator.share({ files: [file], title: 'CableDrop 图片' });
+      await navigator.share({ files: [file], title: t('phone.image.shareTitle') });
     } catch (e) {
       // The user dismissing the sheet is not a failure worth an alert.
       if (e && e.name !== 'AbortError') {
-        toast('分享失败：' + ((e && e.message) || '未知原因'));
+        toast(t('phone.image.shareFailed', { why: (e && e.message) || t('common.unknownReason') }));
       }
     }
     return;
   }
   if (window.CableDropNative && CableDropNative.shareClipImage) {
-    toast('正在准备分享…');
+    toast(t('phone.image.preparing'));
     CableDropNative.shareClipImage(); // the sheet, or an error toast, comes from native
     return;
   }
-  toast('这台手机的网页引擎不支持直接分享，请用「保存到手机」后从相册分享');
+  toast(t('phone.image.shareUnsupported'));
 };
 
 // The download fallback: the endpoint marks the body as an attachment, which
 // the WebView hands to the system DownloadManager and a browser downloads.
 $('saveImage').onclick = () => {
-  if (!imageBlob) { toast('没有可保存的图片'); return; }
-  toast('已交给系统下载');
+  if (!imageBlob) { toast(t('phone.image.nothingToSave')); return; }
+  toast(t('phone.image.saving'));
   window.location.href = '/api/clip/image?dl=1';
 };
 
@@ -371,17 +379,29 @@ $('sendMac').onclick = async () => {
   if (!text.trim()) return;
   try {
     await post('/api/clip', { text });
-    toast('已发送到电脑剪贴板');
+    toast(t('phone.toast.sentToMac'));
     $('toMac').value = '';
     lastClip = ''; // force the next poll to re-read
   } catch (err) {
-    toast('发送失败：' + err.message);
+    toast(t('phone.toast.sendFailed', { why: err.message }));
   }
 };
 
 $('reload').onclick = () => { loadFiles(curSub); refresh(); };
 
 $('retryConn').onclick = () => { refresh(); loadFiles(curSub); };
+
+/* ---------------- language ---------------- */
+
+// applyLang() repaints every string declared with data-i18n; this repaints
+// the ones this file renders from state, right now instead of at the next
+// poll — the sub line through refresh(), the list rows through loadFiles().
+i18nOnChange(() => {
+  if (!lastClip) $('clipText').textContent = t('common.empty');
+  syncUploadUI();
+  loadFiles(curSub);
+  refresh();
+});
 
 /* ---------------- boot ---------------- */
 

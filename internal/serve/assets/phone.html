@@ -35,18 +35,19 @@
   <span class="chip p-logo" aria-hidden="true"><svg class="ic"><use href="#i-cable"/></svg></span>
   <div class="p-head-text">
     <span class="p-title">CableDrop</span>
-    <span class="p-sub"><span class="p-dot" id="connDot"></span><span id="sub">连接中…</span></span>
+    <span class="p-sub"><span class="p-dot" id="connDot"></span><span id="sub" data-i18n="phone.conn.connecting"></span></span>
   </div>
   <span class="p-link" aria-hidden="true">
     <svg class="ic sm-ic"><use href="#i-laptop"/></svg>
     <span class="p-link-line"></span>
     <svg class="ic sm-ic"><use href="#i-phone"/></svg>
   </span>
+  <button class="p-lang" data-i18n-toggle data-i18n-title="common.langTitle" data-i18n-aria="common.langTitle"></button>
 </header>
 
 <div class="p-trust">
   <svg class="ic sm-ic"><use href="#i-shield"/></svg>
-  <span>USB 直连 · 数据不经过网络</span>
+  <span data-i18n="phone.trust"></span>
 </div>
 
 <main class="p-scroll" id="scroller">
@@ -55,80 +56,81 @@
     <section class="p-card p-offline" id="offline" hidden>
       <svg class="ic"><use href="#i-alert"/></svg>
       <span class="p-offline-text">
-        <b>未连接到电脑</b>
-        <span>请确认数据线已插好、电脑端 CableDrop 正在运行，然后下拉或点刷新。</span>
+        <b data-i18n="phone.conn.offline"></b>
+        <span data-i18n="phone.offline.hint"></span>
       </span>
-      <button class="btn sm" id="retryConn">重试</button>
+      <button class="btn sm" id="retryConn" data-i18n="common.retry"></button>
     </section>
 
     <section class="p-card p-note-card" id="noteCard" hidden>
-      <div class="p-label">电脑发来的内容</div>
+      <div class="p-label" data-i18n="phone.note.label"></div>
       <div class="p-note selectable" id="noteText"></div>
       <button class="btn" id="copyNote">
-        <svg class="ic sm-ic"><use href="#i-copy"/></svg>复制到手机
+        <svg class="ic sm-ic"><use href="#i-copy"/></svg><span data-i18n="phone.copy.toPhone"></span>
       </button>
     </section>
 
     <section class="p-card" id="clipCard">
-      <div class="p-label"><svg class="ic sm-ic"><use href="#i-clip"/></svg>电脑剪贴板</div>
-      <div class="p-note selectable" id="clipText">（空）</div>
+      <div class="p-label"><svg class="ic sm-ic"><use href="#i-clip"/></svg><span data-i18n="phone.clip.label"></span></div>
+      <div class="p-note selectable" id="clipText" data-i18n="common.empty"></div>
       <button class="btn" id="copyClip">
-        <svg class="ic sm-ic"><use href="#i-copy"/></svg>复制到手机
+        <svg class="ic sm-ic"><use href="#i-copy"/></svg><span data-i18n="phone.copy.toPhone"></span>
       </button>
     </section>
 
     <section class="p-card" id="clipImageCard" hidden>
-      <div class="p-label"><svg class="ic sm-ic"><use href="#i-clip"/></svg>电脑剪贴板 · 图片</div>
-      <img id="clipImage" class="p-clip-img" alt="电脑剪贴板里的图片">
+      <div class="p-label"><svg class="ic sm-ic"><use href="#i-clip"/></svg><span data-i18n="phone.clip.labelImage"></span></div>
+      <img id="clipImage" class="p-clip-img" alt="" data-i18n-alt="phone.clip.imageAlt">
       <button class="btn" id="shareImage">
-        <svg class="ic sm-ic"><use href="#i-share"/></svg>分享图片
+        <svg class="ic sm-ic"><use href="#i-share"/></svg><span data-i18n="phone.image.share"></span>
       </button>
       <button class="btn ghost" id="copyImage">
-        <svg class="ic sm-ic"><use href="#i-copy"/></svg>复制图片到手机
+        <svg class="ic sm-ic"><use href="#i-copy"/></svg><span data-i18n="phone.image.copy"></span>
       </button>
       <button class="btn ghost" id="saveImage">
-        <svg class="ic sm-ic"><use href="#i-down"/></svg>保存到手机
+        <svg class="ic sm-ic"><use href="#i-down"/></svg><span data-i18n="phone.image.save"></span>
       </button>
     </section>
 
     <section class="p-card">
-      <div class="p-label"><svg class="ic sm-ic"><use href="#i-send"/></svg>发到电脑</div>
-      <textarea id="toMac" placeholder="粘贴或输入文本，发送后直接进电脑剪贴板" spellcheck="false"></textarea>
+      <div class="p-label"><svg class="ic sm-ic"><use href="#i-send"/></svg><span data-i18n="phone.send.label"></span></div>
+      <textarea id="toMac" placeholder="" data-i18n-ph="phone.send.placeholder" spellcheck="false"></textarea>
       <button class="btn" id="sendMac">
-        <svg class="ic sm-ic"><use href="#i-send"/></svg>发送到电脑
+        <svg class="ic sm-ic"><use href="#i-send"/></svg><span data-i18n="phone.send.button"></span>
       </button>
     </section>
 
     <section class="p-card">
-      <div class="p-label"><svg class="ic sm-ic"><use href="#i-up"/></svg>传文件到电脑</div>
+      <div class="p-label"><svg class="ic sm-ic"><use href="#i-up"/></svg><span data-i18n="phone.upload.label"></span></div>
       <label class="p-filepick">
         <input type="file" id="fileInput" multiple>
-        <span id="filePickText">选择要上传的文件</span>
+        <span id="filePickText" data-i18n="phone.upload.pick"></span>
       </label>
-      <button class="btn" id="upload" disabled>上传</button>
+      <button class="btn" id="upload" disabled data-i18n="phone.upload.send"></button>
       <div class="p-progress" id="upProgress" hidden><div id="upBar"></div></div>
     </section>
 
     <section class="p-card">
-      <div class="p-label"><svg class="ic sm-ic"><use href="#i-folder"/></svg>电脑上的文件</div>
+      <div class="p-label"><svg class="ic sm-ic"><use href="#i-folder"/></svg><span data-i18n="phone.files.label"></span></div>
       <div class="p-path" id="filePath" hidden>
-        <button class="icon-btn" id="filesUp" title="上一级" aria-label="上一级">
+        <button class="icon-btn" id="filesUp" data-i18n-title="phone.files.up" data-i18n-aria="phone.files.up">
           <svg class="ic sm-ic"><use href="#i-chev"/></svg>
         </button>
         <span class="p-path-crumb selectable" id="filePathCrumb"></span>
       </div>
-      <div id="files" class="p-list"><div class="empty">读取中…</div></div>
+      <div id="files" class="p-list"><div class="empty" data-i18n="common.loading"></div></div>
       <button class="btn ghost" id="reload">
-        <svg class="ic sm-ic"><use href="#i-refresh"/></svg>刷新列表
+        <svg class="ic sm-ic"><use href="#i-refresh"/></svg><span data-i18n="phone.files.reload"></span>
       </button>
     </section>
 
-    <div class="p-foot">CableDrop · 一根线传文件与文字</div>
+    <div class="p-foot" data-i18n="phone.footer"></div>
   </div>
 </main>
 
 <div class="p-toast" id="toast" role="status" hidden></div>
 
+<script src="js/i18n.js"></script>
 <script src="js/api.js"></script>
 <script src="js/phone.js"></script>
 </body>
