@@ -434,21 +434,50 @@ func crossings(pts []point, y float64) []float64 {
 // same 256-sample canvas as everything else) bilinearly upsample the
 // anti-aliased coverage instead, which stays smooth because the buffer already
 // is.
+//
+// Downsampling is an area-weighted box filter over the output pixel's real
+// footprint in the buffer. The ratio is usually not a whole number — 256 down
+// to 192 is 4:3 — so each edge is taken fractionally. Rounding the ratio to an
+// integer instead reads a sub-rectangle of the buffer, and since the artwork
+// sits inset from the buffer's top-left corner that crops the right and bottom
+// edges and shifts the whole icon up and to the left.
 func (m *mask) coverage(x, y, outSize int) float64 {
 	if outSize > m.n {
 		fx := (float64(x)+0.5)*float64(m.n)/float64(outSize) - 0.5
 		fy := (float64(y)+0.5)*float64(m.n)/float64(outSize) - 0.5
 		return m.sample(fx, fy)
 	}
-	f := m.n / outSize
-	area := float64(f * f)
-	var sum float64
-	for dy := 0; dy < f; dy++ {
-		for dx := 0; dx < f; dx++ {
-			sum += m.buf[(y*f+dy)*m.n+(x*f+dx)]
+
+	scale := float64(m.n) / float64(outSize)
+	x0, x1 := float64(x)*scale, float64(x+1)*scale
+	y0, y1 := float64(y)*scale, float64(y+1)*scale
+
+	var sum, weight float64
+	for by := int(math.Floor(y0)); by < int(math.Ceil(y1)); by++ {
+		if by < 0 || by >= m.n {
+			continue
+		}
+		wy := math.Min(float64(by+1), y1) - math.Max(float64(by), y0)
+		if wy <= 0 {
+			continue
+		}
+		for bx := int(math.Floor(x0)); bx < int(math.Ceil(x1)); bx++ {
+			if bx < 0 || bx >= m.n {
+				continue
+			}
+			wx := math.Min(float64(bx+1), x1) - math.Max(float64(bx), x0)
+			if wx <= 0 {
+				continue
+			}
+			w := wx * wy
+			sum += m.buf[by*m.n+bx] * w
+			weight += w
 		}
 	}
-	return sum / area
+	if weight == 0 {
+		return 0
+	}
+	return sum / weight
 }
 
 // sample reads the buffer at a fractional position, bilinearly.
