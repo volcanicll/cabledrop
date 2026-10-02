@@ -4,5 +4,7 @@
 /dist/
 /build/icons/
 /build/windows/*.syso
+/build/darwin/arch/
+/build/darwin/dmg/
 rsrc_windows_*.syso
 .DS_Store

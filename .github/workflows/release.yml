@@ -1,0 +1,289 @@
+name: Release
+
+# Builds the installable artifact for every platform the project supports and,
+# on a tag, attaches them to a GitHub Release.
+#
+# Where each one is built is not arbitrary, it is what the toolchain allows:
+#
+#   macOS   native, universal (amd64 + arm64 lipo'd) — the Wails backend is
+#           cgo against AppKit, so both slices are real compiles
+#   Windows cross-compiled from macOS — WebView2 is reached through pure
+#           syscalls, so no cgo and no Windows toolchain is needed (the
+#           Makefile says as much)
+#   Linux   native, because GTK 3 / WebKitGTK 4.1 are cgo and are not
+#           cross-compilable without a sysroot
+#   Android gradle, JDK 21 and Android SDK 36
+#
+# A manual run builds everything and leaves the artifacts on the workflow run
+# without publishing anything — that is the dry run. Pushing a v* tag does the
+# same and creates the Release.
+
+on:
+  push:
+    tags: ["v*"]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  macos:
+    name: macOS (universal .app, .dmg)
+    runs-on: macos-14
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          # `git describe --tags` is what names the version, and it needs the
+          # tags to be present.
+          fetch-depth: 0
+      - uses: actions/setup-go@v5
+        with:
+          go-version: "stable"
+          cache: true
+
+      - name: Note the version
+        run: echo "VERSION=$(make -s version)" >> "$GITHUB_ENV"
+
+      - name: Build .app and .dmg
+        run: make dmg
+
+      - name: Smoke-test the packaged binary
+        run: |
+          set -euo pipefail
+          archs=$(lipo -archs CableDrop.app/Contents/MacOS/cabledrop)
+          echo "architectures: $archs"
+          # Both slices must be present, or the "universal" claim is a lie.
+          case "$archs" in
+            *x86_64*) ;;
+            *) echo "missing x86_64 slice" >&2; exit 1 ;;
+          esac
+          case "$archs" in
+            *arm64*) ;;
+            *) echo "missing arm64 slice" >&2; exit 1 ;;
+          esac
+          # --gen-icons runs before any GUI setup, so the packaged binary can be
+          # exercised on a headless runner.
+          ./CableDrop.app/Contents/MacOS/cabledrop --gen-icons /tmp/smoke
+          test -f /tmp/smoke/app-256.png
+
+      - name: Zip the app bundle
+        run: |
+          set -euo pipefail
+          # ditto, not zip: it preserves the bundle's symlinks, permissions and
+          # extended attributes, which is what makes the .app still launch
+          # after a round trip.
+          ditto -c -k --sequesterRsrc --keepParent CableDrop.app \
+            "dist/CableDrop-${VERSION}-macos-universal.zip"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: macos
+          path: |
+            dist/*.dmg
+            dist/*-macos-universal.zip
+          if-no-files-found: error
+
+  windows:
+    name: Windows (amd64, arm64)
+    runs-on: macos-14
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-go@v5
+        with:
+          go-version: "stable"
+          cache: true
+
+      - name: Note the version
+        run: echo "VERSION=$(make -s version)" >> "$GITHUB_ENV"
+
+      - name: Cross-compile
+        run: make windows
+
+      - name: Smoke-test the executables
+        run: |
+          set -euo pipefail
+          for arch in amd64 arm64; do
+            exe="dist/cabledrop-windows-$arch.exe"
+            test -f "$exe"
+            # Confirm the file really is a Windows PE for the architecture it
+            # claims, rather than a macOS binary that happens to be named .exe.
+            file "$exe" | grep -q "PE32+ executable" \
+              || { echo "$exe is not a PE executable" >&2; exit 1; }
+            case "$arch" in
+              amd64) file "$exe" | grep -q "x86-64" \
+                       || { echo "$exe is not x86-64" >&2; exit 1; } ;;
+              arm64) file "$exe" | grep -q "Aarch64" \
+                       || { echo "$exe is not Aarch64" >&2; exit 1; } ;;
+            esac
+          done
+
+      - name: Zip
+        run: |
+          set -euo pipefail
+          for arch in amd64 arm64; do
+            (cd dist && zip -q "CableDrop-${VERSION}-windows-$arch.zip" \
+              "cabledrop-windows-$arch.exe")
+          done
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: windows
+          path: dist/*-windows-*.zip
+          if-no-files-found: error
+
+  linux:
+    name: Linux (amd64)
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-go@v5
+        with:
+          go-version: "stable"
+          cache: true
+
+      - name: Install GTK and WebKitGTK
+        run: |
+          sudo apt-get update
+          # 4.1, not 4.0: the Makefile's gtk3 tag targets GTK 3 with
+          # WebKitGTK 4.1.
+          sudo apt-get install -y libgtk-3-dev libwebkit2gtk-4.1-dev
+
+      - name: Note the version
+        run: echo "VERSION=$(make -s version)" >> "$GITHUB_ENV"
+
+      - name: Build
+        run: make linux
+
+      - name: Smoke-test the binary
+        run: |
+          set -euo pipefail
+          bin="dist/cabledrop-linux-$(go env GOARCH)"
+          test -f "$bin"
+          ldd "$bin" | grep -q webkit2gtk-4.1 \
+            || { echo "not linked against WebKitGTK 4.1" >&2; exit 1; }
+          "$bin" --gen-icons /tmp/smoke
+          test -f /tmp/smoke/app-256.png
+
+      - name: Tar
+        run: |
+          set -euo pipefail
+          tar -C dist -czf "dist/CableDrop-${VERSION}-linux-amd64.tar.gz" \
+            "cabledrop-linux-amd64"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: linux
+          path: dist/*-linux-*.tar.gz
+          if-no-files-found: error
+
+  android:
+    name: Android (APK)
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          # 21, not 17: this is the JDK Android Studio's bundled JBR reports,
+          # and the one the APK in the repository was built with.
+          java-version: "21"
+
+      - uses: android-actions/setup-android@v3
+        with:
+          packages: "platforms;android-36 build-tools;36.0.0"
+
+      - name: Note the version
+        run: echo "VERSION=$(make -s version)" >> "$GITHUB_ENV"
+
+      - name: Build
+        run: |
+          set -euo pipefail
+          # android/app/build.gradle declares compileSdk 36; the Makefile writes
+          # sdk.dir into android/local.properties, which is what Gradle reads.
+          make apk SDK="$ANDROID_SDK_ROOT"
+
+      - name: Check the APK
+        run: |
+          set -euo pipefail
+          aapt2=$(find "$ANDROID_SDK_ROOT/build-tools" -name aapt2 | sort | tail -1)
+          badging=$("$aapt2" dump badging dist/CableDrop.apk)
+          echo "$badging"
+          # Note the capital S in minSdkVersion: aapt2 prints the property as
+          # Android spells it, and a lowercase pattern silently matches nothing.
+          for expect in \
+            "package: name='io.github.volcanicll.cabledrop'" \
+            "minSdkVersion:'24'" \
+            "targetSdkVersion:'36'" \
+            "uses-permission: name='android.permission.INTERNET'"
+          do
+            echo "$badging" | grep -qF "$expect" \
+              || { echo "APK does not report: $expect" >&2; exit 1; }
+          done
+          # A launcher icon for every density, so no device falls back to a
+          # scaled or missing one.
+          for d in mdpi hdpi xhdpi xxhdpi xxxhdpi; do
+            unzip -l dist/CableDrop.apk | grep -q "mipmap-$d" \
+              || { echo "APK has no mipmap-$d icon" >&2; exit 1; }
+          done
+          # TODO before this is a real release: the APK is debug-signed and
+          # marked debuggable, because there is no keystore in the repository.
+          # A release build needs signingConfigs wired to repository secrets,
+          # otherwise the published APK cannot be updated in place.
+          echo "note: this APK is debug-signed (see the Makefile's apk target)"
+
+      - name: Rename for release
+        run: |
+          set -euo pipefail
+          cp dist/CableDrop.apk "dist/CableDrop-${VERSION}.apk"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: android
+          path: dist/CableDrop-*.apk
+          if-no-files-found: error
+
+  publish:
+    name: Publish
+    needs: [macos, windows, linux, android]
+    # Manual runs stop at the artifacts: nothing is published without a tag.
+    if: startsWith(github.ref, 'refs/tags/')
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+
+      - name: Flatten
+        run: |
+          set -euo pipefail
+          mkdir -p release
+          find artifacts -type f -exec cp {} release/ \;
+          ls -la release
+
+      - name: Checksums
+        run: |
+          set -euo pipefail
+          cd release
+          sha256sum * > SHA256SUMS.txt
+          cat SHA256SUMS.txt
+
+      - name: Create the release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          gh release create "$GITHUB_REF_NAME" \
+            --title "$GITHUB_REF_NAME" \
+            --generate-notes \
+            release/*
