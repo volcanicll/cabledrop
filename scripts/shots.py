@@ -64,13 +64,13 @@ def free_port() -> int:
 
 # page -> (path, css width, css height, taller than the viewport?)
 #
-# The panel is a fixed 380x540 window that is laid out to fit exactly — its
+# The panel is a fixed 500x740 window that is laid out to fit exactly — its
 # content is meant not to overflow, so a document that comes back exactly
 # viewport-sized is the correct answer, not a failed capture. The phone page is
 # the opposite: it scrolls inside an inner element and the whole point of the
 # release step is to make it taller than the screen.
 PAGES = {
-    "panel": ("/panel", 380, 540, False),
+    "panel": ("/panel", 500, 740, False),
     "phone": ("/", 390, 844, True),
 }
 

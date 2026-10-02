@@ -72,8 +72,8 @@ func Run(opts Options) error {
 
 	panel := core.Window.NewWithOptions(application.WebviewWindowOptions{
 		Name:          opts.Name,
-		Width:         380,
-		Height:        540,
+		Width:         500,
+		Height:        740,
 		Frameless:     true,
 		AlwaysOnTop:   true,
 		Hidden:        true,
@@ -110,7 +110,7 @@ func Run(opts Options) error {
 			// opaque and looks as before.
 			Backdrop:     application.MacBackdropTranslucent,
 			CornerType:   application.MacWindowCornerTypeRounded,
-			CornerRadius: 12,
+			CornerRadius: 14,
 		},
 	})
 

@@ -10,9 +10,9 @@ html, body { overflow: hidden; }
 
 body.phone {
   /* The phone page inherits tokens.css, and those tokens are sized for the
-     380x540 desktop panel: a 13px base with a 11.5px small. Reusing them here
+     500x740 desktop panel: a 13.5px base with a 12px small. Reusing them here
      put a desk-density type scale on a phone, which reads as a shrunken panel
-     rather than an app — 11.5px secondary text is comfortable on a monitor and
+     rather than an app — 12px secondary text is comfortable on a monitor and
      small in a hand. Restating the scale for this subtree is the whole fix:
      every rule below already reads these variable names, so nothing else has
      to change. Android's own body size is 14-16sp; this sits there. */

@@ -1,7 +1,7 @@
 /* CableDrop — desktop panel. Uses the shared helpers in api.js. */
 
 function shortPath(p) {
-  // Home-relative paths are far easier to read in a 380px panel.
+  // Home-relative paths are far easier to read in a 500px panel.
   const m = /^\/Users\/[^/]+/.exec(p);
   return m ? '~' + p.slice(m[0].length) : String(p).replace(/^[A-Za-z]:\\Users\\[^\\]+/, '~');
 }
@@ -91,7 +91,7 @@ function render(s) {
     : on ? `<span class="dot on"></span>USB 已连接` + (s.storageFree ? ` · ${esc(fmtFree(s.storageFree))} 可用` : '')
          : `<span class="dot"></span>插上 USB 线，手机选「传输文件」`;
 
-  // The diagram's Android end lights up with the link; refresh/close keep a
+  // The diagram dims when the link is down; refresh/close keep a
   // deliberately lower visual weight than the device identity.
   $('linkDiagram').classList.toggle('off', !on);
 
@@ -101,22 +101,23 @@ function render(s) {
   $('tText').setAttribute('aria-disabled', 'false');
 
   const serving = s.serving;
-  $('tServe').classList.toggle('live', serving);
   $('tServe').setAttribute('aria-disabled', (!on && !serving) ? 'true' : 'false');
-  // The real port, whatever the fallback picked; shown as secondary info.
+  // The real URL, scheme included: it goes into a browser, and the phone page
+  // says to type exactly this. Shown even when idle — it is the tile's subject.
   $('serveURL').textContent = s.phoneURL && s.phoneURL !== 'http://localhost:0'
-    ? s.phoneURL.replace(/^http:\/\//, '')
-    : 'localhost:' + (s.port || 8765);
+    ? s.phoneURL
+    : 'http://localhost:' + (s.port || 8765);
 
-  // shared dir
-  $('dirPath').textContent = shortPath(s.serveDir);
+  // shared dir — <bdi> keeps the path reading order intact inside the
+  // rtl-direction container (which puts the ellipsis at the head-hiding end).
+  $('dirPath').innerHTML = '<bdi>' + esc(shortPath(s.serveDir)) + '</bdi>';
 
   // error card
   renderError(s);
 
   // transfers — patched incrementally, never rebuilt wholesale. The error
-  // card is a sibling that shares the fixed 540px height, so when it is up
-  // the list yields a row: 380×540 must never scroll.
+  // card is a sibling that shares the fixed 740px height, so when it is up
+  // the list yields a row: 500×740 must never scroll.
   renderTransfers(s.transfers || [], s.error || (view === 'home' && !s.adbFound) ? 2 : TX_VISIBLE);
 }
 
@@ -165,7 +166,7 @@ function renderError(s) {
 // the row displays, so unchanged rows are untouched across polls.
 const txRows = new Map();
 // The list shows the three newest transfers until asked for everything —
-// the 380×540 panel cannot spare the height for all forty records. When the
+// the 500×740 panel cannot spare the height for all forty records. When the
 // error card is also on screen the cap drops to two, so the two never push
 // the panel into a scroll.
 const TX_VISIBLE = 3;
@@ -291,13 +292,14 @@ function patchTxRow(el, t) {
   const state = el.querySelector('.tx-state');
   if (t.state === 'running') {
     if (t.percent != null) {
-      state.innerHTML = `<span class="tx-pct">${Math.round(t.percent)}%</span>
-        <span class="tx-bar"><i></i></span>`;
+      // Bar leads, the number annotates it — the eye reads progress first.
+      state.innerHTML = `<span class="tx-bar"><i></i></span>
+        <span class="tx-pct">${Math.round(t.percent)}%</span>`;
       state.querySelector('.tx-bar i').style.width =
         Math.max(4, Math.min(100, t.percent)) + '%';
     } else {
-      state.innerHTML = `<span class="tx-pct">传输中</span>
-        <span class="tx-bar indet"><i></i></span>`;
+      state.innerHTML = `<span class="tx-bar indet"><i></i></span>
+        <span class="tx-pct">传输中</span>`;
     }
   } else if (t.state === 'done') {
     state.innerHTML = `<span class="badge done"><span class="b-dot"><svg class="ic"><use href="#i-check"/></svg></span>已完成</span>`;
@@ -336,7 +338,7 @@ async function loadFiles(dir) {
     const d = await api('/api/device/files?path=' + encodeURIComponent(dir));
     curDir = d.path;
     curParent = d.parent;
-    $('filesPath').textContent = shortPath(d.path);
+    $('filesPath').innerHTML = '<bdi>' + esc(shortPath(d.path)) + '</bdi>';
     $('filesList').innerHTML = (d.entries && d.entries.length)
       ? d.entries.map(fileRow).join('')
       : `<div class="empty">

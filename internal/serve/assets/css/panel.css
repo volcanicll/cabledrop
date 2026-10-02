@@ -1,4 +1,4 @@
-/* Desktop panel styles. The panel window is 380×540; every size here is
+/* Desktop panel styles. The panel window is 500×740; every size here is
    chosen against that budget — nothing may push content below the fold. */
 
 /* ---------- layout ---------- */
@@ -7,7 +7,7 @@
 
 .scroll {
   flex: 1; overflow-y: auto; overscroll-behavior: contain;
-  padding: 2px var(--s-3) var(--s-1);
+  padding: 4px var(--s-4) var(--s-1);
   scrollbar-gutter: stable;
 }
 .scroll::-webkit-scrollbar { width: 8px; }
@@ -17,23 +17,26 @@
 
 /* ---------- top bar: device + link diagram ---------- */
 
+/* The taller header is the mockup's: the device identity sits a breath
+   lower than a toolbar would. */
 .topbar {
-  display: flex; align-items: center; gap: var(--s-2);
-  padding: var(--s-3) var(--s-3) var(--s-2);
+  display: flex; align-items: center; gap: var(--s-3);
+  padding: 18px var(--s-4) 14px;
   flex: 0 0 auto;
 }
-.dev-glyph { width: 40px; height: 40px; border-radius: 12px; }
+.dev-glyph { width: 40px; height: 40px; border-radius: 13px; }
+.dev-glyph .ic { width: 20px; height: 20px; }
 .status { flex: 1; min-width: 0; margin-left: 2px; }
 /* display:block matters: these are <span>s, and an inline box ignores
    overflow/text-overflow, so the ellipsis rules below would be dead code. */
-.status-name { display: block; font-weight: 700; font-size: 17px; letter-spacing: -.01em;
+.status-name { display: block; font-weight: 700; font-size: var(--fs-xl); letter-spacing: -.01em;
                line-height: 1.3; color: var(--text);
                white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .status-name.off { color: var(--text-2); }
 .status-sub { display: flex; align-items: center; color: var(--text-2); font-size: var(--fs-sm);
               line-height: 1.4;
               white-space: nowrap; overflow: hidden; }
-.dot { flex: 0 0 auto; width: 6px; height: 6px; border-radius: 50%;
+.dot { flex: 0 0 auto; width: 7px; height: 7px; border-radius: 50%;
        background: var(--text-3); margin-right: 6px;
        transition: background var(--t-med) var(--ease); }
 .dot.on { background: var(--ok);
@@ -42,37 +45,36 @@
 
 /* Mac ⇄ USB ⇄ Android, small and quiet: it answers "which end is which"
    without shouting about technology. Width is capped hard — the header also
-   carries two icon buttons, and 380px leaves little slack. */
+   carries two icon buttons, and 500px leaves just enough slack. */
 .link-diagram {
-  display: flex; align-items: center; gap: 2px;
-  color: var(--text-3); flex: 0 0 auto;
+  display: flex; align-items: center; gap: 3px;
+  color: var(--text-2); flex: 0 0 auto;
   transition: color var(--t-med) var(--ease), opacity var(--t-med) var(--ease);
 }
 .link-diagram.off { opacity: 0.45; }
-.link-diagram .ic { width: 13px; height: 13px; }
-.ld-item { display: flex; flex-direction: column; align-items: center; gap: 1px; }
-.ld-item .ic + span { font-size: 8.5px; line-height: 1; letter-spacing: 0.01em; }
+.link-diagram .ic { width: 16px; height: 16px; }
+.ld-item { display: flex; flex-direction: column; align-items: center; gap: 2px; }
+.ld-item span { font-size: 9.5px; line-height: 1; letter-spacing: 0.02em;
+                color: var(--text-3); }
 /* The middle leg is the USB glyph alone: the two labels the user reads are
    Mac and Android. */
-.ld-line { width: 5px; border-top: 1.5px solid currentColor; border-radius: 1px;
-           margin-bottom: 8px; opacity: .6; }
-.link-diagram .ld-item:last-child { color: var(--accent-text); }
-.link-diagram.off .ld-item:last-child { color: var(--text-3); }
+.ld-line { width: 20px; border-top: 1.5px solid currentColor; border-radius: 1px;
+           margin-bottom: 9px; opacity: .55; }
 
 /* ---------- skeleton ---------- */
 
 .skel-page { display: flex; flex-direction: column; gap: var(--s-2); }
-.skel-tile { height: 72px; border-radius: var(--r-lg); }
-.skel-group-label { height: 13px; width: 72px; margin-top: var(--s-3); }
-.skel-row { height: 46px; border-radius: var(--r-md); }
+.skel-tile { height: 106px; border-radius: var(--r-lg); }
+.skel-group-label { height: 15px; width: 80px; margin-top: var(--s-4); }
+.skel-row { height: 62px; border-radius: var(--r-lg); }
 .skel-row.wide { margin-top: var(--s-3); }
 
 /* ---------- error card ---------- */
 
 .error-card {
   display: flex; align-items: flex-start; gap: var(--s-2);
-  padding: 7px var(--s-3);
-  margin-bottom: 6px;
+  padding: 9px var(--s-3);
+  margin-bottom: var(--s-2);
   border-radius: var(--r-md);
   background: var(--err-soft);
   color: var(--err);
@@ -95,20 +97,17 @@
 
 /* ---------- action tiles ---------- */
 
-.tiles { display: grid; grid-template-columns: 1fr 1fr; gap: var(--s-2); }
+.tiles { display: grid; grid-template-columns: 1fr 1fr; gap: var(--s-3); }
 
 .tile {
   display: flex; align-items: flex-start; gap: var(--s-2);
-  padding: var(--s-2);
+  padding: 14px;
   background: var(--surface);
   border-radius: var(--r-lg);
   box-shadow: var(--shadow-card);
-  /* Transparent border seat: the dashed drop target needs one, and without
-     the seat its content would shift by the border width. */
-  border: 1.5px solid transparent;
   text-align: left;
   transition: background var(--t-fast) var(--ease), transform var(--t-fast) var(--ease),
-              box-shadow var(--t-fast) var(--ease), border-color var(--t-fast) var(--ease);
+              box-shadow var(--t-fast) var(--ease);
   /* Grid items default to min-width:auto; a long subtitle would stretch the
      column past the panel instead of ellipsising. */
   min-width: 0;
@@ -119,43 +118,63 @@
 }
 .tile:active:not([aria-disabled="true"]):not(:disabled) { transform: scale(0.975); }
 .tile:disabled, .tile[aria-disabled="true"] { opacity: 0.42; cursor: default; }
-.tile-glyph { width: 32px; height: 32px; border-radius: var(--r-md); }
+.tile-glyph { width: 36px; height: 36px; border-radius: var(--r-md); }
+.tile-glyph .ic { width: 18px; height: 18px; }
 /* Per-card icon colours, following the reference: send stays brand blue,
    phone files are the "receiving works" green, clipboard gets purple. */
 .tile-glyph.glyph-ok { background: var(--ok-soft); color: var(--ok); }
 .tile-glyph.glyph-purple { background: var(--purple-soft); color: var(--purple); }
-.tile.live .tile-glyph { background: var(--ok-soft); color: var(--ok); }
-.tile-text { flex: 1 1 auto; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
-.tile-title { display: flex; align-items: center; font-weight: 600; font-size: 13.5px;
+.tile-text { flex: 1 1 auto; min-width: 0; display: flex; flex-direction: column; gap: 3px; }
+.tile-title { display: flex; align-items: center; font-weight: 650; font-size: var(--fs-lg);
               line-height: 1.35; color: var(--text);
               white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .chev { margin-left: auto; color: var(--text-3); display: inline-flex; padding-right: 2px; }
-.chev .sm-ic { width: 13px; height: 13px; }
-.tile-sub { display: block; color: var(--text-2); font-size: var(--fs-sm); line-height: 1.4;
+.chev .sm-ic { width: 14px; height: 14px; }
+.tile-sub { display: block; color: var(--text-2); font-size: var(--fs-sm); line-height: 1.45;
             font-variant-numeric: tabular-nums;
             white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.tile-micro { display: block; color: var(--text-3); font-size: 10.5px; line-height: 1.35;
+.tile-micro { display: block; color: var(--text-3); font-size: var(--fs-xs); line-height: 1.4;
               white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
-              min-height: 14px; }
+              min-height: 15px; }
 
 /* 便签 capability badge, quiet purple. */
 .pill-purple {
-  display: inline-block; padding: 1px 8px; border-radius: var(--r-full);
+  display: inline-block; padding: 2px 9px; border-radius: var(--r-full);
   background: var(--purple-soft); color: var(--purple);
-  font-size: 10.5px; line-height: 1.35;
+  font-size: var(--fs-xs); line-height: 1.35;
   white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 100%;
 }
 
-/* 手机网页 tile: icon row above, URL control spanning the card below. */
-.tile.stacked { flex-direction: column; gap: 4px; }
+/* 发送文件 tile: a dashed drop zone wrapped around icon + title, with the
+   capability line as a caption beneath it — the zone reads as the target,
+   the caption as its footnote. */
+.tile.drop { flex-direction: column; align-items: stretch; gap: 7px; }
+.drop-zone {
+  display: flex; align-items: flex-start; gap: var(--s-2);
+  padding: 9px 10px;
+  border: 1.5px dashed var(--line-strong);
+  border-radius: 12px;
+  min-width: 0;
+  transition: border-color var(--t-fast) var(--ease), background var(--t-fast) var(--ease);
+}
+.tile.drop .tile-micro { padding: 0 3px; }
+
+/* 手机网页 tile: icon row above, URL control spanning the card below. The
+   sub keeps the full "在手机浏览器中打开 CableDrop" copy from the reference;
+   at 500px that cannot stay on one line beside the icon, so it wraps. */
+.tile.stacked { flex-direction: column; gap: 6px; }
+.tile.stacked .tile-sub { white-space: normal; }
 .stack-top { display: flex; align-items: flex-start; gap: var(--s-2);
              min-width: 0; width: 100%; }
-.url-row { display: flex; align-items: center; gap: 5px; width: 100%; }
+.url-row { display: flex; align-items: center; gap: 6px; width: 100%; }
 .url-box {
   flex: 1; min-width: 0;
-  background: var(--surface-2); border-radius: 8px;
-  padding: 2px 8px;
-  font: 10.5px/1.5 ui-monospace, SFMono-Regular, Menlo, monospace;
+  background: var(--surface); border-radius: var(--r-sm);
+  box-shadow: inset 0 0 0 1px var(--line-strong);
+  padding: 3px 9px;
+  /* Proportional, like the reference — mono at this width truncates the
+     one URL the panel always shows. */
+  font-size: var(--fs-xs); line-height: 1.6;
   color: var(--text-2);
   white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
 }
@@ -163,8 +182,8 @@
 .btn-copy {
   flex: 0 0 auto;
   background: var(--accent); color: #fff;
-  font-size: 10.5px; font-weight: 600; line-height: 1;
-  padding: 4px 9px; border-radius: 8px;
+  font-size: var(--fs-xs); font-weight: 600; line-height: 1;
+  padding: 6px 10px; border-radius: var(--r-sm);
   transition: background var(--t-fast) var(--ease), transform var(--t-fast) var(--ease);
 }
 .btn-copy:hover { background: var(--accent-text); }
@@ -172,20 +191,21 @@
 
 /* ---------- 文件保存位置 ---------- */
 
-.dest-row { margin-top: var(--s-2); padding: var(--s-2) var(--s-3); }
-.dest-row .row-title { font-weight: 600; font-size: 13.5px; }
-/* Three stacked lines, as in the reference: at 380px a single
-   "path · note" line cannot fit and would ellipsise the point away. */
-.dest-row .row-main { display: flex; flex-direction: column; gap: 1px; }
-.dest-path { display: block; font-size: 12.5px; line-height: 1.45; color: var(--text);
+.dest-row { margin-top: 14px; padding: var(--s-3) var(--s-4); }
+.dest-row .tile-glyph { align-self: center; }
+.dest-row .row-title { font-weight: 650; font-size: var(--fs-lg); }
+/* Three stacked lines, as in the reference: a single "path · note" line
+   cannot fit and would ellipsise the point away. */
+.dest-row .row-main { display: flex; flex-direction: column; gap: 2px; }
+.dest-path { display: block; font-size: var(--fs-md); line-height: 1.45; color: var(--accent-text);
              white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
              direction: rtl; text-align: left; }
-.dest-note { display: block; color: var(--text-3); font-size: 10.5px; line-height: 1.4;
+.dest-note { display: block; color: var(--text-3); font-size: var(--fs-xs); line-height: 1.4;
              white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.row-actions { display: flex; gap: var(--s-1); flex: 0 0 auto; }
+.row-actions { display: flex; gap: var(--s-2); flex: 0 0 auto; }
 .btn-outline {
-  min-height: 26px; padding: 0 11px;
-  border-radius: 8px;
+  min-height: 30px; padding: 0 13px;
+  border-radius: var(--r-sm);
   color: var(--text);
   box-shadow: inset 0 0 0 1px var(--line-strong);
   font-size: var(--fs-sm); font-weight: 500;
@@ -199,25 +219,25 @@
 
 /* ---------- groups ---------- */
 
-.group { margin-top: var(--s-3); }
+.group { margin-top: 20px; }
 .group-head {
   display: flex; align-items: baseline; justify-content: space-between;
-  padding: 0 2px var(--s-1);
+  padding: 0 3px var(--s-2);
 }
 .group-head h2 {
-  margin: 0; font-size: 13px; font-weight: 600; color: var(--text);
+  margin: 0; font-size: var(--fs-lg); font-weight: 650; color: var(--text);
 }
 .head-links { display: flex; gap: var(--s-3); align-items: baseline; }
 
 .card {
   background: var(--surface);
-  border-radius: var(--r-md);
+  border-radius: var(--r-lg);
   box-shadow: var(--shadow-card);
 }
 
 .row { display: flex; align-items: center; gap: var(--s-2);
-       padding: var(--s-2) var(--s-3); min-height: 46px; }
-.bar-row { padding: var(--s-1) var(--s-2); min-height: 44px;
+       padding: var(--s-2) var(--s-3); min-height: 52px; }
+.bar-row { padding: var(--s-1) var(--s-2); min-height: 46px;
            box-shadow: var(--shadow-card); }
 .row-main { flex: 1; min-width: 0; }
 /* block, not inline — see the note on .status-name. */
@@ -243,7 +263,7 @@
 .btn-row .btn { flex: 1; }
 
 .note-box {
-  background: var(--surface); border-radius: var(--r-md);
+  background: var(--surface); border-radius: var(--r-lg);
   box-shadow: var(--shadow-card);
   padding: var(--s-2) var(--s-3);
   font: var(--fs-md)/1.6 ui-monospace, Menlo, monospace;
@@ -255,26 +275,28 @@
 /* ---------- transfers ---------- */
 
 .tx {
-  display: flex; align-items: center; gap: var(--s-2);
-  padding: var(--s-2) var(--s-3);
+  display: flex; align-items: center; gap: var(--s-3);
+  padding: var(--s-3) var(--s-4);
   position: relative;
-  min-height: 50px;
+  min-height: 70px;
   cursor: pointer;
 }
 .tx-chip {
-  width: 32px; height: 32px; border-radius: var(--r-md);
+  width: 36px; height: 36px; border-radius: var(--r-md);
   display: grid; place-items: center; flex: 0 0 auto;
   background: var(--surface-2); color: var(--text-2);
 }
-.tx-chip .ic { width: 16px; height: 16px; }
-.tx-chip.push { background: var(--ok-soft); color: var(--ok); }
-.tx-chip.pull, .tx-chip.upload { background: var(--accent-soft); color: var(--accent-text); }
+.tx-chip .ic { width: 17px; height: 17px; }
+/* Direction shows in the arrow, not the colour: push and pull share the
+   brand-blue chip, failures turn red. */
+.tx-chip.push, .tx-chip.pull, .tx-chip.upload, .tx-chip.running {
+  background: var(--accent-soft); color: var(--accent-text);
+}
 .tx-chip.failed { background: var(--err-soft); color: var(--err); }
-.tx-chip.running { background: var(--accent-soft); color: var(--accent-text); }
 .tx-chip.running .ic { animation: spin 1.1s linear infinite; }
 
-.tx-main { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 1px; }
-.tx-name { display: block; font-size: var(--fs-md); font-weight: 500; line-height: 1.4;
+.tx-main { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+.tx-name { display: block; font-size: var(--fs-base); font-weight: 600; line-height: 1.4;
            white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .tx-sub { display: block; color: var(--text-2); font-size: var(--fs-sm); line-height: 1.4;
           white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
@@ -283,39 +305,39 @@
 .tx.open .tx-name, .tx.open .tx-sub { white-space: normal; overflow-wrap: anywhere; }
 .tx-chev { flex: 0 0 auto; color: var(--text-3); display: inline-flex;
            transition: transform var(--t-fast) var(--ease); }
-.tx-chev .ic { width: 13px; height: 13px; }
+.tx-chev .ic { width: 14px; height: 14px; }
 .tx.open .tx-chev { transform: rotate(90deg); }
 
 .tx-side { flex: 0 0 auto; display: flex; flex-direction: column; align-items: flex-end;
-           gap: 1px; min-width: 52px; }
-.tx-size { font-size: var(--fs-sm); color: var(--text); font-weight: 500;
-           font-variant-numeric: tabular-nums; line-height: 1.4; }
+           gap: 2px; min-width: 56px; }
+.tx-size { font-size: var(--fs-md); color: var(--text); font-weight: 600;
+           font-variant-numeric: tabular-nums; line-height: 1.35; }
 .tx-size:empty::before { content: "—"; color: var(--text-3); font-weight: 400; }
-.tx-time { font-size: var(--fs-xs); color: var(--text-3); line-height: 1.4;
+.tx-time { font-size: var(--fs-xs); color: var(--text-3); line-height: 1.35;
            font-variant-numeric: tabular-nums; }
 
-.tx-state { flex: 0 0 auto; display: flex; align-items: center; gap: 5px;
-            min-width: 58px; justify-content: flex-end; }
+.tx-state { flex: 0 0 auto; display: flex; align-items: center; gap: 7px;
+            min-width: 66px; justify-content: flex-end; }
 .badge {
-  display: inline-flex; align-items: center; gap: 4px;
+  display: inline-flex; align-items: center; gap: 5px;
   font-size: var(--fs-xs); font-weight: 500; line-height: 1;
 }
-.badge .b-dot { width: 14px; height: 14px; border-radius: 50%; display: grid; place-items: center;
+.badge .b-dot { width: 15px; height: 15px; border-radius: 50%; display: grid; place-items: center;
                 flex: 0 0 auto; }
 .badge .b-dot .ic { width: 9px; height: 9px; stroke-width: 2.6; }
-.badge.done { color: var(--ok); }
-.badge.done .b-dot { background: var(--ok-soft); color: var(--ok); }
+.badge.done { color: var(--ok-text); }
+.badge.done .b-dot { background: var(--ok-soft); color: var(--ok-text); }
 .badge.failed { color: var(--err); }
 .badge.failed .b-dot { background: var(--err-soft); color: var(--err); }
 
-.tx-pct { color: var(--accent-text); font-size: var(--fs-xs);
+.tx-pct { color: var(--accent-text); font-size: var(--fs-xs); font-weight: 600;
           font-variant-numeric: tabular-nums; }
-.tx-bar { width: 40px; height: 4px; border-radius: 2px; background: var(--surface-2);
+.tx-bar { width: 56px; height: 4px; border-radius: 2px; background: var(--surface-2);
           overflow: hidden; flex: 0 0 auto; }
 .tx-bar i { display: block; height: 100%; width: 0; background: var(--accent);
             border-radius: 2px;
             transition: width var(--t-slow) var(--ease); }
-.tx-bar.indet { width: 40px; }
+.tx-bar.indet { width: 56px; }
 .tx-bar.indet i { width: 30%; animation: indet 1.1s ease-in-out infinite; }
 @keyframes indet { from { transform: translateX(-110%); } to { transform: translateX(410%); } }
 
@@ -323,7 +345,7 @@
    the incremental renderer can move rows freely. */
 .tx:not(:first-child)::before,
 #filesList .row:not(:first-child)::before {
-  content: ""; position: absolute; top: 0; left: var(--s-3); right: 0;
+  content: ""; position: absolute; top: 0; left: var(--s-4); right: 0;
   border-top: 1px solid var(--line);
 }
 .tx { position: relative; }
@@ -338,17 +360,18 @@
 
 .trust {
   flex: 0 0 auto;
-  display: flex; align-items: center; justify-content: space-between; gap: var(--s-2);
-  margin: 0 var(--s-3) var(--s-2);
-  padding: 7px var(--s-3);
+  display: flex; align-items: center; justify-content: space-between; gap: var(--s-3);
+  margin: 0 var(--s-4) var(--s-3);
+  padding: 10px var(--s-3);
   border-radius: var(--r-md);
-  background: color-mix(in srgb, var(--ok) 5%, var(--surface));
+  background: color-mix(in srgb, var(--ok) 6%, var(--surface));
   box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--ok) 16%, var(--line));
-  color: var(--text-2); font-size: var(--fs-sm);
+  font-size: var(--fs-sm);
 }
-.trust-left { display: flex; align-items: center; gap: 6px; min-width: 0;
+.trust-left { display: flex; align-items: center; gap: 7px; min-width: 0;
+              color: var(--ok-text); font-weight: 500;
               white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.trust-left .ic { width: 14px; height: 14px; color: var(--ok); flex: 0 0 auto; }
+.trust-left .ic { width: 16px; height: 16px; color: var(--ok-text); flex: 0 0 auto; }
 .trust-right { color: var(--text-3); font-size: var(--fs-xs); flex: 0 0 auto;
                white-space: nowrap; }
 
@@ -362,10 +385,9 @@
   font-weight: 600; color: var(--accent-text); font-size: var(--fs-base);
 }
 
-/* The send tile itself turns into the target while a drag is over it. */
-.tile.drop { border-color: color-mix(in srgb, var(--line-strong) 88%, transparent);
-             border-style: dashed; }
-.tile.drop.drop-hot {
+/* The send tile's dashed zone is the visible target while a drag is over it. */
+.tile.drop .drop-zone { border-color: color-mix(in srgb, var(--line-strong) 88%, transparent); }
+.tile.drop.drop-hot .drop-zone {
   border-color: var(--accent);
   border-style: solid;
   background: var(--accent-soft);
@@ -402,7 +424,7 @@ html.native-glass .tile {
 html.native-glass .tile:hover:not(:disabled):not([aria-disabled="true"]) {
   background: color-mix(in srgb, var(--surface-2) 88%, transparent);
 }
-html.native-glass .tile.drop-hot {
+html.native-glass .tile.drop-hot .drop-zone {
   background: color-mix(in srgb, var(--accent) 16%, transparent);
 }
 html.native-glass textarea,
