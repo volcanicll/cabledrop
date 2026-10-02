@@ -51,6 +51,9 @@ async function copyText(text) {
 
 let lastNoteAt = 0;
 let lastClip = '';
+let lastImageSum = null; // null = never fetched; '' = clipboard has no image
+let imageBlob = null;
+let imageUrl = '';
 let online = null;
 
 async function refresh() {
@@ -73,6 +76,10 @@ async function refresh() {
       $('clipText').textContent = clipText || '（空）';
     }
 
+    // The clipboard's image, signalled by a fingerprint on /api/clip so the
+    // bytes are only fetched when the picture actually changed.
+    await syncClipImage(clip.image || '');
+
     // A note only steals attention when it is new, so scrolling back to a
     // previously read note isn't fought by the poll.
     const noteText = note.text || '';
@@ -84,6 +91,43 @@ async function refresh() {
     if (!noteText) $('noteCard').hidden = true;
   } catch (e) {
     setOnline(false);
+  }
+}
+
+// Swaps the clipboard card between text and picture. The text card stays for
+// anything typed or copied as text — the page reads exactly as before when the
+// clipboard never holds an image — and only gives way when the clipboard is a
+// picture and there is no text to show beside it.
+async function syncClipImage(sum) {
+  if (sum === lastImageSum) return;
+  // A poll may have re-read a newer fingerprint by the time the bytes arrive;
+  // bail out of showing stale data for a sum we no longer want.
+  const stale = (got) => got !== lastImageSum;
+  lastImageSum = sum;
+
+  if (!sum) {
+    if (imageUrl) { URL.revokeObjectURL(imageUrl); imageUrl = ''; }
+    imageBlob = null;
+    $('clipImageCard').hidden = true;
+    $('clipCard').hidden = false;
+    return;
+  }
+
+  try {
+    const res = await fetch('/api/clip/image', { cache: 'no-store' });
+    if (stale(sum)) return;
+    if (!res.ok) throw new Error('HTTP ' + res.status);
+    const blob = await res.blob();
+    if (stale(sum)) return;
+    imageBlob = blob;
+    if (imageUrl) URL.revokeObjectURL(imageUrl);
+    imageUrl = URL.createObjectURL(blob);
+    $('clipImage').src = imageUrl;
+    $('clipImageCard').hidden = false;
+    // A picture and no words: the text card would just read （空）.
+    $('clipCard').hidden = !lastClip;
+  } catch (e) {
+    if (!stale(sum)) $('clipImageCard').hidden = true;
   }
 }
 
@@ -192,6 +236,12 @@ $('upload').onclick = () => {
   xhr.open('POST', '/upload');
   $('upProgress').hidden = false;
   $('upload').disabled = true;
+  const reset = () => {
+    $('upProgress').hidden = true;
+    $('upBar').style.width = '0%';
+    $('upload').disabled = false;
+    $('upload').textContent = '上传';
+  };
 
   xhr.upload.onprogress = (ev) => {
     if (!ev.lengthComputable) return;
@@ -201,30 +251,69 @@ $('upload').onclick = () => {
   };
 
   xhr.onload = () => {
-    $('upProgress').hidden = true;
-    $('upBar').style.width = '0%';
-    $('upload').disabled = false;
+    reset();
     chosen = [];
     $('fileInput').value = '';
-    $('upload').textContent = '上传';
     if (xhr.status === 200) {
       toast('已传到电脑');
       loadFiles(curSub);
     } else {
-      let msg = '上传失败';
+      // The server answers failures with a JSON error body: surface it, never
+      // a bare "上传失败" that hides whether it was a bad request or a full
+      // disk.
+      let msg = '上传失败（HTTP ' + xhr.status + '）';
       try { msg = JSON.parse(xhr.responseText).error || msg; } catch (_) { }
       toast(msg);
     }
   };
 
-  xhr.onerror = () => {
-    $('upProgress').hidden = true;
-    $('upload').disabled = false;
-    $('upload').textContent = '上传';
-    toast('上传失败');
+  // A network-level failure never gets an HTTP status. Over adb reverse that
+  // means either the cable/tunnel dropped, or the phone failed to read the
+  // chosen file's contents — naming both beats a bare "失败".
+  const streamDied = () => {
+    reset();
+    const n = chosen.length;
+    chosen = [];
+    $('fileInput').value = '';
+    console.error('upload aborted: readyState=%d status=%d files=%d',
+      xhr.readyState, xhr.status, n);
+    toast('上传失败：连接中断。请检查数据线后重试；若刚选完文件，可能是这个文件读不出来，换个文件试试');
   };
+  xhr.upload.onerror = streamDied;
+  xhr.onerror = streamDied;
 
   xhr.send(fd);
+};
+
+/* ---------------- copy the clipboard image ---------------- */
+
+// Writing an image needs the ClipboardItem form of the API, which is both
+// newer and pickier than writeText: the WebView some ROMs ship (this project's
+// reference phone serves pages from Chrome 75) has neither. Every failure must
+// name itself — a silent dead button reads as "the bridge is broken" — and the
+// save button below stays as the path that works everywhere.
+$('copyImage').onclick = async () => {
+  if (!imageBlob) { toast('没有可复制的图片'); return; }
+  if (!navigator.clipboard || !window.ClipboardItem) {
+    toast('这台手机的浏览器不支持复制图片，请用下面的「保存到手机」');
+    return;
+  }
+  try {
+    await navigator.clipboard.write([new ClipboardItem({ 'image/png': imageBlob })]);
+    toast('图片已复制到手机');
+  } catch (e) {
+    const why = (e && e.name === 'NotAllowedError') ? '没有获得剪贴板权限'
+      : (e && e.message) || '未知原因';
+    toast('复制图片失败（' + why + '），请用「保存到手机」');
+  }
+};
+
+// The download fallback: the endpoint marks the body as an attachment, which
+// the WebView hands to the system DownloadManager and a browser downloads.
+$('saveImage').onclick = () => {
+  if (!imageBlob) { toast('没有可保存的图片'); return; }
+  toast('已交给系统下载');
+  window.location.href = '/api/clip/image?dl=1';
 };
 
 /* ---------------- wiring ---------------- */

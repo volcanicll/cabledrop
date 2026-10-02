@@ -68,11 +68,22 @@
       </button>
     </section>
 
-    <section class="p-card">
+    <section class="p-card" id="clipCard">
       <div class="p-label"><svg class="ic sm-ic"><use href="#i-clip"/></svg>电脑剪贴板</div>
       <div class="p-note selectable" id="clipText">（空）</div>
       <button class="btn" id="copyClip">
         <svg class="ic sm-ic"><use href="#i-copy"/></svg>复制到手机
+      </button>
+    </section>
+
+    <section class="p-card" id="clipImageCard" hidden>
+      <div class="p-label"><svg class="ic sm-ic"><use href="#i-clip"/></svg>电脑剪贴板 · 图片</div>
+      <img id="clipImage" class="p-clip-img" alt="电脑剪贴板里的图片">
+      <button class="btn" id="copyImage">
+        <svg class="ic sm-ic"><use href="#i-copy"/></svg>复制图片到手机
+      </button>
+      <button class="btn ghost" id="saveImage">
+        <svg class="ic sm-ic"><use href="#i-down"/></svg>保存到手机
       </button>
     </section>
 

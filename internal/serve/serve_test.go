@@ -1,6 +1,8 @@
 package serve_test
 
 import (
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"io"
 	"mime/multipart"
@@ -24,6 +26,7 @@ type fakeBackend struct {
 	serving    bool
 	clip       string
 	clipErr    error
+	clipImage  []byte
 	note       string
 	noteAt     int64
 	serveDir   string
@@ -73,8 +76,15 @@ func (f *fakeBackend) StartServing() error            { f.serving = true; return
 func (f *fakeBackend) StopServing()                   { f.serving = false }
 func (f *fakeBackend) ClipboardText() string          { return f.clip }
 func (f *fakeBackend) ClipboardSet(text string) error { f.clip = text; return f.clipErr }
-func (f *fakeBackend) Note() (string, int64)          { return f.note, f.noteAt }
-func (f *fakeBackend) SetNote(text string)            { f.note = text; f.noteAt = 42 }
+func (f *fakeBackend) ClipboardImage() ([]byte, string) {
+	if len(f.clipImage) == 0 {
+		return nil, ""
+	}
+	sum := sha256.Sum256(f.clipImage)
+	return f.clipImage, hex.EncodeToString(sum[:])
+}
+func (f *fakeBackend) Note() (string, int64) { return f.note, f.noteAt }
+func (f *fakeBackend) SetNote(text string)   { f.note = text; f.noteAt = 42 }
 func (f *fakeBackend) ListDeviceDir(dir string) ([]model.Entry, error) {
 	return f.entries, f.listErr
 }
@@ -185,6 +195,76 @@ var errFake = &fakeError{}
 type fakeError struct{}
 
 func (*fakeError) Error() string { return "fake clipboard failure" }
+
+// TestAPIClipImageEndpoint pins the image side of the clipboard contract: the
+// text endpoint gains an image fingerprint, the binary endpoint serves the
+// bytes with the right type and no image means a 404 carrying the JSON error
+// shape the pages parse.
+func TestAPIClipImageEndpoint(t *testing.T) {
+	b := newFakeBackend()
+	h := serve.NewHandler(b, true) // the phone-facing surface, like real use
+
+	// No image: the fingerprint is empty and the binary endpoint answers 404
+	// with a JSON error body, not a text 404 page.
+	rec := httptest.NewRecorder()
+	h.ServeHTTP(rec, httptest.NewRequest("GET", "/api/clip", nil))
+	var clip struct {
+		Text  string `json:"text"`
+		Image string `json:"image"`
+	}
+	json.Unmarshal(rec.Body.Bytes(), &clip)
+	if clip.Image != "" {
+		t.Fatalf("empty clipboard image fingerprint = %q", clip.Image)
+	}
+	rec = httptest.NewRecorder()
+	h.ServeHTTP(rec, httptest.NewRequest("GET", "/api/clip/image", nil))
+	if rec.Code != http.StatusNotFound {
+		t.Fatalf("image endpoint without image = %d", rec.Code)
+	}
+	if !strings.Contains(rec.Body.String(), `"error"`) {
+		t.Fatalf("404 body is not the JSON error shape: %s", rec.Body.String())
+	}
+
+	// With an image: bytes round-trip, the type and fingerprint match, and the
+	// text endpoint's fingerprint points at it.
+	b.clipImage = []byte("89504E47-fake-png-bytes")
+	sum := sha256.Sum256(b.clipImage)
+	wantSum := hex.EncodeToString(sum[:])
+
+	rec = httptest.NewRecorder()
+	h.ServeHTTP(rec, httptest.NewRequest("GET", "/api/clip/image", nil))
+	if rec.Code != http.StatusOK {
+		t.Fatalf("image endpoint = %d", rec.Code)
+	}
+	if got := rec.Header().Get("Content-Type"); got != "image/png" {
+		t.Fatalf("content-type = %q", got)
+	}
+	if got := rec.Header().Get("ETag"); got != `"`+wantSum+`"` {
+		t.Fatalf("etag = %q, want %q", got, wantSum)
+	}
+	if rec.Body.String() != string(b.clipImage) {
+		t.Fatalf("body does not match the clipboard image")
+	}
+
+	rec = httptest.NewRecorder()
+	h.ServeHTTP(rec, httptest.NewRequest("GET", "/api/clip", nil))
+	clip = struct {
+		Text  string `json:"text"`
+		Image string `json:"image"`
+	}{}
+	json.Unmarshal(rec.Body.Bytes(), &clip)
+	if clip.Image != wantSum {
+		t.Fatalf("text endpoint fingerprint = %q, want %q", clip.Image, wantSum)
+	}
+
+	// ?dl=1 turns the same bytes into a download, the fallback for phones that
+	// cannot write images to their clipboard.
+	rec = httptest.NewRecorder()
+	h.ServeHTTP(rec, httptest.NewRequest("GET", "/api/clip/image?dl=1", nil))
+	if cd := rec.Header().Get("Content-Disposition"); !strings.HasPrefix(cd, "attachment;") {
+		t.Fatalf("dl=1 content-disposition = %q", cd)
+	}
+}
 
 func TestAPINote(t *testing.T) {
 	b := newFakeBackend()

@@ -49,6 +49,9 @@ type Backend interface {
 
 	ClipboardText() string
 	ClipboardSet(text string) error
+	// ClipboardImage returns the clipboard's image as PNG bytes plus a
+	// content fingerprint; empty bytes mean the clipboard carries no image.
+	ClipboardImage() (png []byte, sum string)
 	Note() (string, int64)
 	SetNote(text string)
 
@@ -116,10 +119,36 @@ func NewHandler(backend Backend, forPhone bool) http.Handler {
 	// --- desktop clipboard, both directions ---------------------------
 
 	mux.HandleFunc("GET /api/clip", func(w http.ResponseWriter, r *http.Request) {
+		_, sum := b.ClipboardImage()
 		writeJSON(w, map[string]any{
 			"text": b.ClipboardText(),
 			"at":   time.Now().Unix(),
+			// Fingerprint of the clipboard's image, "" when there is none.
+			// Extra key: older pages that never read it keep working.
+			"image": sum,
 		})
+	})
+
+	// The clipboard's image, for the phone to preview and copy. 404 when the
+	// clipboard holds no image — an everyday state, not an error page.
+	// ?dl=1 marks the body as an attachment, which is the fallback path for
+	// phones whose browser cannot write images to their own clipboard: the
+	// WebView's download handler picks it up and saves it.
+	mux.HandleFunc("GET /api/clip/image", func(w http.ResponseWriter, r *http.Request) {
+		png, sum := b.ClipboardImage()
+		if len(png) == 0 {
+			httpError(w, http.StatusNotFound, "电脑剪贴板里没有图片")
+			return
+		}
+		w.Header().Set("Content-Type", "image/png")
+		w.Header().Set("ETag", `"`+sum+`"`)
+		if r.URL.Query().Get("dl") != "" {
+			name := time.Now().Format("cabledrop-20060102-150405.png")
+			w.Header().Set("Content-Disposition",
+				"attachment; filename*=UTF-8''"+urlEscape(name))
+		}
+		w.Header().Set("Cache-Control", "no-store")
+		w.Write(png)
 	})
 
 	// The phone posts here; the text lands in the desktop's clipboard.

@@ -809,6 +809,8 @@ func (a *App) ClipboardText() string { return a.clip.Text() }
 
 func (a *App) ClipboardSet(text string) error { return a.clip.Set(text) }
 
+func (a *App) ClipboardImage() ([]byte, string) { return a.clip.Image(), a.clip.ImageSum() }
+
 func (a *App) ListDeviceDir(dir string) ([]model.Entry, error) { return device.ListDir(dir) }
 
 func (a *App) DeviceDirs() []model.Entry { return device.DeviceDirs() }
