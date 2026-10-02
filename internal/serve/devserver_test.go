@@ -83,11 +83,11 @@ type demoBackend struct {
 
 var demoTransfers = []model.Transfer{
 	{ID: "t3", Name: "屏幕录像-最终版.mov", Kind: "push", State: "running",
-		Detail: "", Indeterminate: true, StartedAt: time.Now().UnixMilli() - 41_000, At: 3},
+		Indeterminate: true, StartedAt: time.Now().UnixMilli() - 41_000, At: 3, Size: 1_204_338_001},
 	{ID: "t2", Name: "项目验收报告-终稿.pdf", Kind: "pull", State: "done",
-		Detail: "已保存到共享目录", At: 2},
+		Detail: "从手机取回 · 共享目录", At: time.Now().Unix() - 120, Size: 5_872_450},
 	{ID: "t1", Name: "IMG_20261001_周日夜跑合影.jpg", Kind: "push", State: "done",
-		Detail: "已发送到手机 Download", At: 1},
+		Detail: "发送到手机 · Download", At: time.Now().Unix() - 25, Size: 3_842_150},
 }
 
 func (d demoBackend) State() model.State {
@@ -95,7 +95,7 @@ func (d demoBackend) State() model.State {
 	st.ADBFound = true
 	st.ADBPath = "/Users/demo/Library/Android/sdk/platform-tools/adb"
 	st.Connected = true
-	st.Device = "PJF110"
+	st.Device = "Pixel 9 Pro"
 	st.Serial = "OP5CFBL1"
 	st.StorageFree = "77G"
 	st.Serving = true

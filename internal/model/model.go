@@ -4,7 +4,10 @@
 // app, ui — can share them without wiring the whole program together.
 package model
 
-import "errors"
+import (
+	"errors"
+	"strings"
+)
 
 // Device is one Android device as `adb devices -l` reports it.
 type Device struct {
@@ -14,10 +17,11 @@ type Device struct {
 }
 
 // Name is what the UI shows: the human model name when adb reported one,
-// otherwise the serial.
+// otherwise the serial. adb joins multi-word models with underscores
+// ("Pixel_8 Pro"); spaces read like a product name should.
 func (d Device) Name() string {
 	if d.Model != "" {
-		return d.Model
+		return strings.ReplaceAll(d.Model, "_", " ")
 	}
 	return d.Serial
 }
@@ -51,6 +55,11 @@ type Transfer struct {
 	Percent       *float64 `json:"percent,omitempty"`
 	Indeterminate bool     `json:"indeterminate,omitempty"`
 	StartedAt     int64    `json:"startedAt,omitempty"`
+
+	// Size is the file's byte size when it is known before the transfer
+	// starts (desktop pushes); pulls learn nothing until adb finishes, so
+	// they leave it zero and the UI omits it.
+	Size int64 `json:"size,omitempty"`
 }
 
 // State is everything the UI needs in one payload.

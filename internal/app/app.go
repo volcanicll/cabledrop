@@ -8,6 +8,7 @@
 package app
 
 import (
+	"errors"
 	"fmt"
 	"log"
 	"net"
@@ -258,7 +259,15 @@ func (a *App) refresh() {
 		a.free = ""
 		a.dev = model.Device{}
 		if len(a.transfers) == 0 {
-			a.lastErr = ""
+			// "没有检测到手机" is the plain unplugged state — the header
+			// covers it without an alarm. Anything else (unauthorized,
+			// offline) is actionable and belongs on the error card.
+			msg := err.Error()
+			if strings.Contains(msg, "没有检测到手机") || errors.Is(err, device.ErrNoADB) {
+				a.lastErr = ""
+			} else {
+				a.lastErr = humanDeviceError(msg)
+			}
 		}
 	default:
 		a.connected = true
@@ -496,7 +505,7 @@ func (a *App) StartServing() error {
 		// Port taken: fall back to whatever the OS gives us.
 		ln, err = net.Listen("tcp", "127.0.0.1:0")
 		if err != nil {
-			a.setErr(fmt.Sprintf("无法启动本地服务: %v", err))
+			a.setErr(fmt.Sprintf("本地服务启动失败，请重启 CableDrop\n%v", err))
 			return err
 		}
 	}
@@ -519,11 +528,13 @@ func (a *App) StartServing() error {
 	// machine, which is what makes the app diagnosable when adb misbehaves.
 	remote := fmt.Sprintf("tcp:%d", port)
 	if _, errOut, code, err := device.Default.Run(15*time.Second, "reverse", remote, remote); err != nil || code != 0 {
-		msg := "服务已启动，但手机隧道建立失败"
+		// Lead with the action the user can take; the adb detail moves to the
+		// secondary line the UI renders smaller.
+		msg := "USB 通道连接失败，请重新插拔数据线后重试"
 		if errOut != "" {
-			msg += ": " + strings.TrimSpace(errOut)
+			msg += "\nadb reverse: " + strings.TrimSpace(errOut)
 		} else if err != nil {
-			msg += ": " + err.Error()
+			msg += "\nadb reverse: " + err.Error()
 		}
 		a.setErr(msg)
 	} else {
@@ -573,13 +584,14 @@ func (a *App) ServeDir() string {
 
 // --- transfers -----------------------------------------------------------
 
-func (a *App) addTransfer(name, kind string) string {
+func (a *App) addTransfer(name, kind string, size int64) string {
 	a.mu.Lock()
 	defer a.mu.Unlock()
 	a.seq++
 	id := fmt.Sprintf("t%d", a.seq)
 	a.transfers = append([]model.Transfer{{
 		ID: id, Name: name, Kind: kind, State: "running", At: time.Now().Unix(),
+		Size: size,
 		// Indeterminate by default: a single adb push or pull exposes no
 		// stream progress, so the UI shows a moving bar plus elapsed time.
 		Indeterminate: true,
@@ -668,18 +680,18 @@ func (a *App) PushFiles(paths []string, destDir string) {
 
 	for _, p := range paths {
 		p := p
-		id := a.addTransfer(filepath.Base(p), "push")
+		id := a.addTransfer(filepath.Base(p), "push", sizes[p])
 		ids[p] = id
 		go func() {
 			remote, err := push(p, destDir)
 			if err != nil {
-				a.finishTransfer(id, "failed", err.Error())
+				a.finishTransfer(id, "failed", humanTransferError(err.Error()))
 				return
 			}
 			bump(p)
 			// The full device path is noise in an 11px line; the folder is
 			// what the user actually wants to know.
-			a.finishTransfer(id, "done", "已发送到手机 "+filepath.Base(filepath.Dir(remote)))
+			a.finishTransfer(id, "done", "发送到手机 · "+filepath.Base(filepath.Dir(remote)))
 		}()
 	}
 }
@@ -690,16 +702,64 @@ func (a *App) PullDeviceFile(remote string) {
 	if pull == nil {
 		pull = device.PullFile
 	}
-	id := a.addTransfer(baseName(remote), "pull")
+	id := a.addTransfer(baseName(remote), "pull", 0)
 	go func() {
-		if _, err := pull(remote, a.ServeDir()); err != nil {
-			a.finishTransfer(id, "failed", err.Error())
+		local, err := pull(remote, a.ServeDir())
+		if err != nil {
+			a.finishTransfer(id, "failed", humanTransferError(err.Error()))
 			return
 		}
-		// The destination is already shown under 共享目录, so naming it again
-		// just fills the row.
-		a.finishTransfer(id, "done", "已保存到共享目录")
+		// The file is now on this machine: its size is knowable even though
+		// adb never reported one, and the history row shows it like a push's.
+		if fi, statErr := os.Stat(local); statErr == nil {
+			a.setTransferSize(id, fi.Size())
+		}
+		a.finishTransfer(id, "done", "从手机取回 · 共享目录")
 	}()
+}
+
+// setTransferSize fills in a size learned after the transfer started.
+func (a *App) setTransferSize(id string, size int64) {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	for i := range a.transfers {
+		if a.transfers[i].ID == id {
+			a.transfers[i].Size = size
+			return
+		}
+	}
+}
+
+// humanDeviceError maps device-detection failures to user-facing language,
+// adb's original wording demoted to a detail line.
+func humanDeviceError(msg string) string {
+	lower := strings.ToLower(msg)
+	switch {
+	case strings.Contains(lower, "unauthorized"):
+		return "手机上还没有允许 USB 调试\n请在手机弹出的授权窗口中点「允许」\n" + msg
+	case strings.Contains(lower, "offline") || strings.Contains(lower, "device not found"):
+		return "手机连接不稳定\n请重新插拔数据线\n" + msg
+	}
+	return msg
+}
+
+// humanTransferError turns the adb errors users actually hit into language a
+// non-developer can act on. The original string is kept after a newline so
+// the UI can show it as secondary detail; anything unrecognised passes
+// through unchanged.
+func humanTransferError(err string) string {
+	lower := strings.ToLower(err)
+	switch {
+	case strings.Contains(lower, "unauthorized"):
+		return "手机上还没有允许 USB 调试\n请在手机弹出的授权窗口中点「允许」后重试\n" + err
+	case strings.Contains(lower, "adb 超时") || strings.Contains(lower, "timeout"):
+		return "USB 传输超时\n请重新插拔数据线后重试\n" + err
+	case strings.Contains(lower, "no such file or directory"):
+		return "手机上的文件已不存在\n请刷新手机文件列表\n" + err
+	case strings.Contains(lower, "read-only file system"):
+		return "手机上的这个位置不可写入\n换个保存位置试试\n" + err
+	}
+	return err
 }
 
 // baseName is device-agnostic: the last path segment, either separator.

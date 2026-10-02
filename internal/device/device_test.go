@@ -37,7 +37,9 @@ func newFakeADB(reply func(cmd string) (string, error)) *fakeADB {
 			out, errOut, code, err := f.pushReply(args[1], args[2])
 			return out, errOut, code, err
 		}
-		return "", "", 0, nil
+		// adb subcommands like `devices -l` reach the script too.
+		out, err := f.reply(strings.Join(args, " "))
+		return out, "", 0, err
 	}
 	return f
 }
@@ -298,4 +300,50 @@ func waitForCond(t *testing.T, cond func() bool, within time.Duration) {
 		time.Sleep(2 * time.Millisecond)
 	}
 	t.Fatal("condition not reached in time")
+}
+
+// Some vendors ship no model: column — FirstDevice then asks the phone
+// itself. marketname wins; an empty marketname falls through to model.
+func TestFirstDeviceAsksThePhoneForItsName(t *testing.T) {
+	f := newFakeADB(func(cmd string) (string, error) {
+		if strings.Contains(cmd, "devices -l") {
+			return "List of devices attached\nSERIAL1\tdevice usb:1-1 product:PX8 device:PX8", nil
+		}
+		if strings.Contains(cmd, "getprop ro.product.marketname") {
+			return "一加 12\nPJF110", nil
+		}
+		return "", nil
+	})
+	dev, err := f.FirstDevice()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if dev.Model != "一加 12" {
+		t.Fatalf("model = %q, want the marketing name", dev.Model)
+	}
+}
+
+func TestFirstDeviceFallsBackWhenGetpropFails(t *testing.T) {
+	f := newFakeADB(func(cmd string) (string, error) {
+		if strings.Contains(cmd, "devices -l") {
+			return "List of devices attached\nSERIAL1\tdevice", nil
+		}
+		return "", errors.New("closed")
+	})
+	dev, err := f.FirstDevice()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if dev.Model != "" || dev.Name() != "SERIAL1" {
+		t.Fatalf("fallback broken: %+v name=%q", dev, dev.Name())
+	}
+}
+
+func TestDeviceNameUnderscoresBecomeSpaces(t *testing.T) {
+	if got := (model.Device{Model: "Pixel_8_Pro"}).Name(); got != "Pixel 8 Pro" {
+		t.Fatalf("Name = %q", got)
+	}
+	if got := (model.Device{Serial: "40f844d3"}).Name(); got != "40f844d3" {
+		t.Fatalf("serial fallback broken: %q", got)
+	}
 }

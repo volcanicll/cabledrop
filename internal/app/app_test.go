@@ -152,8 +152,8 @@ func TestTransferStateMachine(t *testing.T) {
 	a := New()
 
 	// Newest first.
-	id1 := a.addTransfer("a.txt", "push")
-	id2 := a.addTransfer("b.txt", "pull")
+	id1 := a.addTransfer("a.txt", "push", 0)
+	id2 := a.addTransfer("b.txt", "pull", 0)
 	st := a.State()
 	if len(st.Transfers) != 2 || st.Transfers[0].ID != id2 || st.Transfers[1].ID != id1 {
 		t.Fatalf("order = %+v", st.Transfers)
@@ -163,10 +163,10 @@ func TestTransferStateMachine(t *testing.T) {
 	}
 
 	// Finishing writes state and detail; failures also land in Error.
-	a.finishTransfer(id1, "done", "已保存到共享目录")
+	a.finishTransfer(id1, "done", "从手机取回 · 共享目录")
 	a.finishTransfer(id2, "failed", "设备离线")
 	st = a.State()
-	if st.Transfers[1].State != "done" || st.Transfers[1].Detail != "已保存到共享目录" {
+	if st.Transfers[1].State != "done" || st.Transfers[1].Detail != "从手机取回 · 共享目录" {
 		t.Fatalf("done transfer = %+v", st.Transfers[1])
 	}
 	if st.Transfers[0].State != "failed" || st.Error != "设备离线" {
@@ -174,7 +174,7 @@ func TestTransferStateMachine(t *testing.T) {
 	}
 
 	// Clear keeps running transfers, drops finished ones.
-	id3 := a.addTransfer("c.txt", "push")
+	id3 := a.addTransfer("c.txt", "push", 0)
 	a.ClearTransfers()
 	st = a.State()
 	if len(st.Transfers) != 1 || st.Transfers[0].ID != id3 {
@@ -188,7 +188,7 @@ func TestTransferStateMachine(t *testing.T) {
 func TestTransferHistoryIsCapped(t *testing.T) {
 	a := New()
 	for i := 0; i < maxTransfers+20; i++ {
-		a.addTransfer("f.bin", "push")
+		a.addTransfer("f.bin", "push", 0)
 	}
 	st := a.State()
 	if len(st.Transfers) != maxTransfers {
@@ -232,8 +232,46 @@ func TestPushFailureWritesTheError(t *testing.T) {
 		return len(st.Transfers) == 1 && st.Transfers[0].State == "failed"
 	})
 	st := a.State()
-	if st.Error != "adb 超时" || st.Transfers[0].Detail != "adb 超时" {
+	// Timeout is one of the errors the panel translates for the user; the
+	// adb wording rides along as the secondary detail line.
+	if !strings.Contains(st.Error, "USB 传输超时") || !strings.Contains(st.Error, "adb 超时") {
 		t.Fatalf("state = %+v", st)
+	}
+	if !strings.Contains(st.Transfers[0].Detail, "重新插拔") {
+		t.Fatalf("detail = %+v", st.Transfers[0])
+	}
+}
+
+func TestPushSizeIsRecorded(t *testing.T) {
+	a := New()
+	a.pushFile = func(local, remoteDir string) (string, error) {
+		return "/sdcard/Download/" + filepath.Base(local), nil
+	}
+	dir := t.TempDir()
+	os.WriteFile(filepath.Join(dir, "sized.bin"), make([]byte, 1234), 0o644)
+	a.PushFiles([]string{filepath.Join(dir, "sized.bin")}, "")
+	waitFor(t, func() bool {
+		st := a.State()
+		return len(st.Transfers) == 1 && st.Transfers[0].State == "done"
+	})
+	st := a.State()
+	if st.Transfers[0].Size != 1234 {
+		t.Fatalf("size = %d, want 1234", st.Transfers[0].Size)
+	}
+	if st.Transfers[0].Detail != "发送到手机 · Download" {
+		t.Fatalf("detail = %q", st.Transfers[0].Detail)
+	}
+}
+
+func TestHumanDeviceErrorMapsTheCommonFailures(t *testing.T) {
+	if got := humanDeviceError("error: device unauthorized."); !strings.Contains(got, "允许 USB 调试") {
+		t.Fatalf("unauthorized mapping broken: %q", got)
+	}
+	if got := humanDeviceError("error: device offline"); !strings.Contains(got, "重新插拔") {
+		t.Fatalf("offline mapping broken: %q", got)
+	}
+	if got := humanDeviceError("some odd failure"); got != "some odd failure" {
+		t.Fatalf("unknown error should pass through: %q", got)
 	}
 }
 
@@ -337,7 +375,7 @@ func TestTrayDedupesBeforeTouchingTheIcon(t *testing.T) {
 
 func TestStateSnapshotIsACopy(t *testing.T) {
 	a := New()
-	a.addTransfer("x", "push")
+	a.addTransfer("x", "push", 0)
 	st := a.State()
 	st.Transfers[0].Name = "mutated"
 	if a.State().Transfers[0].Name == "mutated" {
@@ -528,4 +566,23 @@ func waitFor(t *testing.T, cond func() bool) {
 		time.Sleep(2 * time.Millisecond)
 	}
 	t.Fatal("condition not reached in time")
+}
+
+func TestPullRecordsTheSizeItLearned(t *testing.T) {
+	a := New()
+	dir := t.TempDir()
+	a.serveDir = dir
+	a.pullFile = func(remote, localDir string) (string, error) {
+		dest := filepath.Join(localDir, "pulled.bin")
+		os.WriteFile(dest, make([]byte, 4321), 0o644)
+		return dest, nil
+	}
+	a.PullDeviceFile("/sdcard/pulled.bin")
+	waitFor(t, func() bool {
+		st := a.State()
+		return len(st.Transfers) == 1 && st.Transfers[0].State == "done"
+	})
+	if got := a.State().Transfers[0].Size; got != 4321 {
+		t.Fatalf("size = %d, want 4321 (stat of the local copy)", got)
+	}
 }

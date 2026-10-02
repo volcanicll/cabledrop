@@ -27,3 +27,25 @@ First release.
   integration and a clear offline state
 - Icons drawn in code by a small in-process rasteriser; no binary artwork in
   the repository
+
+## Unreleased
+
+### Changed
+
+- Panel UI polish pass: the phone's real model name is the header headline
+  (asked from the device over `getprop` when adb's listing has none), the
+  connection line spells out "USB 已连接 · 77 GB 可用", and a small
+  Mac ⇄ USB ⇄ Android diagram lights up with the link
+- Action cards carry a clearer hierarchy: 发送文件 is a visible drop target
+  that highlights on hover-drag, 手机文件 and 剪贴板 gain direction and
+  capability hints, and 手机网页 shows the real address with a copy button
+  instead of using localhost as the tile's subtitle
+- 共享目录 is now 文件保存位置 (path on its own line, with 打开/更改 as
+  outlined buttons); 最近传输 rows show direction, destination, size,
+  relative time and a status badge, collapse to the newest three, and expand
+  on demand
+- Transfer failures and device errors are translated into actionable
+  language with the adb text demoted to a secondary line; a green trust
+  banner states the USB-only guarantee without overclaiming
+- Pulls record the file size once the local copy exists, so their history
+  rows show a size like pushes do

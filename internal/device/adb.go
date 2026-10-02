@@ -252,7 +252,53 @@ func (a *ADB) FirstDevice() (model.Device, error) {
 	if len(devices) == 0 {
 		return model.Device{}, errors.New("没有检测到手机。请插上 USB 线，并在手机上把 USB 用途改成「传输文件」。")
 	}
-	return devices[0], nil
+	dev := devices[0]
+	// Some vendors report no model: column at all — the panel would then show
+	// a bare serial like 40f844d3 as the device's name. One getprop call asks
+	// the phone itself; it only runs when a device appears or changes, never
+	// on a timer. Failure is silent: the listing name is still better than
+	// refusing to show the device.
+	if dev.Model == "" {
+		if name := a.deviceMarketName(); name != "" {
+			dev.Model = name
+		}
+	}
+	return dev, nil
+}
+
+// deviceMarketName asks the phone for its human-facing model name, preferring
+// the marketing name ("一加 12", "Pixel 8 Pro") over the machine model code
+// ("DT2002C"). Four properties answer in a single shell call, in order of how
+// presentable they are; the first usable one wins.
+//
+// Vendors disagree about which property carries the name — a plain phone has
+// ro.product.model, some ROMs only fill the odm/vendor copy, and system-image
+// leftovers ("qssi system image for arm64") are worse than no name at all, so
+// those are filtered out.
+func (a *ADB) deviceMarketName() string {
+	out, err := a.Shell(4*time.Second, strings.Join([]string{
+		"getprop ro.product.marketname",
+		"getprop ro.product.model",
+		"getprop ro.product.odm.model",
+		"getprop ro.product.vendor.model",
+	}, "; "))
+	if err != nil {
+		return ""
+	}
+	for _, line := range strings.Split(out, "\n") {
+		name := strings.TrimSpace(line)
+		if name == "" || looksLikeSystemImage(name) {
+			continue
+		}
+		return name
+	}
+	return ""
+}
+
+// looksLikeSystemImage rejects values that name a build rather than a product.
+func looksLikeSystemImage(s string) bool {
+	l := strings.ToLower(s)
+	return strings.Contains(l, "system image") || l == "unknown" || l == "qssi"
 }
 
 // Shell runs a command on the device.

@@ -1,5 +1,5 @@
-/* Desktop panel styles. The panel window is 380×540; every width here is
-   chosen against that. */
+/* Desktop panel styles. The panel window is 380×540; every size here is
+   chosen against that budget — nothing may push content below the fold. */
 
 /* ---------- layout ---------- */
 
@@ -7,7 +7,7 @@
 
 .scroll {
   flex: 1; overflow-y: auto; overscroll-behavior: contain;
-  padding: var(--s-3);
+  padding: 2px var(--s-3) var(--s-1);
   scrollbar-gutter: stable;
 }
 .scroll::-webkit-scrollbar { width: 8px; }
@@ -15,20 +15,23 @@
                                    border: 2px solid transparent; background-clip: content-box; }
 .scroll::-webkit-scrollbar-thumb:hover { background: var(--text-3); background-clip: content-box; }
 
-/* ---------- top bar ---------- */
+/* ---------- top bar: device + link diagram ---------- */
 
 .topbar {
   display: flex; align-items: center; gap: var(--s-2);
   padding: var(--s-3) var(--s-3) var(--s-2);
   flex: 0 0 auto;
 }
-.topbar .brand { width: 36px; height: 36px; }
+.dev-glyph { width: 40px; height: 40px; border-radius: 12px; }
 .status { flex: 1; min-width: 0; margin-left: 2px; }
 /* display:block matters: these are <span>s, and an inline box ignores
    overflow/text-overflow, so the ellipsis rules below would be dead code. */
-.status-name { display: block; font-weight: 600; font-size: var(--fs-lg); line-height: 1.35;
+.status-name { display: block; font-weight: 700; font-size: 17px; letter-spacing: -.01em;
+               line-height: 1.3; color: var(--text);
                white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.status-name.off { color: var(--text-2); }
 .status-sub { display: flex; align-items: center; color: var(--text-2); font-size: var(--fs-sm);
+              line-height: 1.4;
               white-space: nowrap; overflow: hidden; }
 .dot { flex: 0 0 auto; width: 6px; height: 6px; border-radius: 50%;
        background: var(--text-3); margin-right: 6px;
@@ -37,12 +40,32 @@
           box-shadow: 0 0 0 3px color-mix(in srgb, var(--ok) 22%, transparent); }
 .dot.err { background: var(--err); }
 
+/* Mac ⇄ USB ⇄ Android, small and quiet: it answers "which end is which"
+   without shouting about technology. Width is capped hard — the header also
+   carries two icon buttons, and 380px leaves little slack. */
+.link-diagram {
+  display: flex; align-items: center; gap: 2px;
+  color: var(--text-3); flex: 0 0 auto;
+  transition: color var(--t-med) var(--ease), opacity var(--t-med) var(--ease);
+}
+.link-diagram.off { opacity: 0.45; }
+.link-diagram .ic { width: 13px; height: 13px; }
+.ld-item { display: flex; flex-direction: column; align-items: center; gap: 1px; }
+.ld-item .ic + span { font-size: 8.5px; line-height: 1; letter-spacing: 0.01em; }
+/* The middle leg is the USB glyph alone: the two labels the user reads are
+   Mac and Android. */
+.ld-line { width: 5px; border-top: 1.5px solid currentColor; border-radius: 1px;
+           margin-bottom: 8px; opacity: .6; }
+.link-diagram .ld-item:last-child { color: var(--accent-text); }
+.link-diagram.off .ld-item:last-child { color: var(--text-3); }
+
 /* ---------- skeleton ---------- */
 
 .skel-page { display: flex; flex-direction: column; gap: var(--s-2); }
-.skel-tile { height: 54px; border-radius: var(--r-lg); }
+.skel-tile { height: 72px; border-radius: var(--r-lg); }
 .skel-group-label { height: 13px; width: 72px; margin-top: var(--s-3); }
 .skel-row { height: 46px; border-radius: var(--r-md); }
+.skel-row.wide { margin-top: var(--s-3); }
 
 /* ---------- error card ---------- */
 
@@ -57,7 +80,10 @@
   line-height: 1.55;
 }
 .error-card .ic { flex: 0 0 auto; width: 15px; height: 15px; margin-top: 2px; }
-.error-body { flex: 1; min-width: 0; word-break: break-word; }
+.error-body { flex: 1; min-width: 0; word-break: break-word; white-space: pre-line; }
+/* The adb原文 after the first newline is secondary: smaller, quieter. */
+.error-detail { color: color-mix(in srgb, var(--err) 62%, var(--text-2));
+                font-size: var(--fs-xs); display: block; margin-top: 2px; }
 .error-card .btn { margin: -2px 0 -2px var(--s-1); color: var(--err); }
 
 /* ---------- view switching ---------- */
@@ -67,48 +93,119 @@
   from { opacity: 0; transform: translateY(6px); }
 }
 
-/* ---------- tiles ---------- */
+/* ---------- action tiles ---------- */
 
 .tiles { display: grid; grid-template-columns: 1fr 1fr; gap: var(--s-2); }
 
 .tile {
-  display: flex; align-items: center; gap: var(--s-2);
-  min-height: 54px;
-  padding: var(--s-2) var(--s-3);
+  display: flex; align-items: flex-start; gap: var(--s-2);
+  padding: var(--s-2);
   background: var(--surface);
   border-radius: var(--r-lg);
   box-shadow: var(--shadow-card);
+  /* Transparent border seat: the dashed drop target needs one, and without
+     the seat its content would shift by the border width. */
+  border: 1.5px solid transparent;
   text-align: left;
   transition: background var(--t-fast) var(--ease), transform var(--t-fast) var(--ease),
-              box-shadow var(--t-fast) var(--ease);
+              box-shadow var(--t-fast) var(--ease), border-color var(--t-fast) var(--ease);
   /* Grid items default to min-width:auto; a long subtitle would stretch the
      column past the panel instead of ellipsising. */
   min-width: 0;
+  position: relative;
 }
 @media (hover: hover) {
-  .tile:hover:not(:disabled) { background: var(--surface-2); }
+  .tile:hover:not([aria-disabled="true"]):not(:disabled) { background: var(--surface-2); }
 }
-.tile:active:not(:disabled) { transform: scale(0.975); }
-.tile:disabled { opacity: 0.42; }
-.tile-glyph { width: 30px; height: 30px; border-radius: var(--r-md); }
+.tile:active:not([aria-disabled="true"]):not(:disabled) { transform: scale(0.975); }
+.tile:disabled, .tile[aria-disabled="true"] { opacity: 0.42; cursor: default; }
+.tile-glyph { width: 32px; height: 32px; border-radius: var(--r-md); }
+/* Per-card icon colours, following the reference: send stays brand blue,
+   phone files are the "receiving works" green, clipboard gets purple. */
+.tile-glyph.glyph-ok { background: var(--ok-soft); color: var(--ok); }
+.tile-glyph.glyph-purple { background: var(--purple-soft); color: var(--purple); }
 .tile.live .tile-glyph { background: var(--ok-soft); color: var(--ok); }
-.tile-text { flex: 1 1 auto; min-width: 0; }
-.tile-title { display: block; font-weight: 600; font-size: var(--fs-md); line-height: 1.4;
+.tile-text { flex: 1 1 auto; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+.tile-title { display: flex; align-items: center; font-weight: 600; font-size: 13.5px;
+              line-height: 1.35; color: var(--text);
               white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.chev { margin-left: auto; color: var(--text-3); display: inline-flex; padding-right: 2px; }
+.chev .sm-ic { width: 13px; height: 13px; }
 .tile-sub { display: block; color: var(--text-2); font-size: var(--fs-sm); line-height: 1.4;
             font-variant-numeric: tabular-nums;
             white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.tile-micro { display: block; color: var(--text-3); font-size: 10.5px; line-height: 1.35;
+              white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+              min-height: 14px; }
+
+/* 便签 capability badge, quiet purple. */
+.pill-purple {
+  display: inline-block; padding: 1px 8px; border-radius: var(--r-full);
+  background: var(--purple-soft); color: var(--purple);
+  font-size: 10.5px; line-height: 1.35;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 100%;
+}
+
+/* 手机网页 tile: icon row above, URL control spanning the card below. */
+.tile.stacked { flex-direction: column; gap: 4px; }
+.stack-top { display: flex; align-items: flex-start; gap: var(--s-2);
+             min-width: 0; width: 100%; }
+.url-row { display: flex; align-items: center; gap: 5px; width: 100%; }
+.url-box {
+  flex: 1; min-width: 0;
+  background: var(--surface-2); border-radius: 8px;
+  padding: 2px 8px;
+  font: 10.5px/1.5 ui-monospace, SFMono-Regular, Menlo, monospace;
+  color: var(--text-2);
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.tile.stacked .tile-text { flex: 1 1 auto; }
+.btn-copy {
+  flex: 0 0 auto;
+  background: var(--accent); color: #fff;
+  font-size: 10.5px; font-weight: 600; line-height: 1;
+  padding: 4px 9px; border-radius: 8px;
+  transition: background var(--t-fast) var(--ease), transform var(--t-fast) var(--ease);
+}
+.btn-copy:hover { background: var(--accent-text); }
+.btn-copy:active { transform: scale(0.95); }
+
+/* ---------- 文件保存位置 ---------- */
+
+.dest-row { margin-top: var(--s-2); padding: var(--s-2) var(--s-3); }
+.dest-row .row-title { font-weight: 600; font-size: 13.5px; }
+/* Three stacked lines, as in the reference: at 380px a single
+   "path · note" line cannot fit and would ellipsise the point away. */
+.dest-row .row-main { display: flex; flex-direction: column; gap: 1px; }
+.dest-path { display: block; font-size: 12.5px; line-height: 1.45; color: var(--text);
+             white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+             direction: rtl; text-align: left; }
+.dest-note { display: block; color: var(--text-3); font-size: 10.5px; line-height: 1.4;
+             white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.row-actions { display: flex; gap: var(--s-1); flex: 0 0 auto; }
+.btn-outline {
+  min-height: 26px; padding: 0 11px;
+  border-radius: 8px;
+  color: var(--text);
+  box-shadow: inset 0 0 0 1px var(--line-strong);
+  font-size: var(--fs-sm); font-weight: 500;
+  background: var(--surface);
+  transition: background var(--t-fast) var(--ease), transform var(--t-fast) var(--ease);
+}
+@media (hover: hover) {
+  .btn-outline:hover { background: var(--surface-2); }
+}
+.btn-outline:active { transform: scale(0.95); }
 
 /* ---------- groups ---------- */
 
-.group { margin-top: var(--s-4); }
+.group { margin-top: var(--s-3); }
 .group-head {
   display: flex; align-items: baseline; justify-content: space-between;
   padding: 0 2px var(--s-1);
 }
 .group-head h2 {
-  margin: 0; font-size: var(--fs-sm); font-weight: 600; color: var(--text-2);
-  letter-spacing: 0.02em;
+  margin: 0; font-size: 13px; font-weight: 600; color: var(--text);
 }
 .head-links { display: flex; gap: var(--s-3); align-items: baseline; }
 
@@ -122,15 +219,12 @@
        padding: var(--s-2) var(--s-3); min-height: 46px; }
 .bar-row { padding: var(--s-1) var(--s-2); min-height: 44px;
            box-shadow: var(--shadow-card); }
-.row + .row, .row + .tx, .tx + .row, .tx + .tx { position: relative; }
 .row-main { flex: 1; min-width: 0; }
 /* block, not inline — see the note on .status-name. */
 .row-title { display: block; font-size: var(--fs-md); line-height: 1.45;
              white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .row-sub { display: block; color: var(--text-2); font-size: var(--fs-sm); line-height: 1.45;
            white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.dir-glyph { width: 26px; height: 26px; border-radius: var(--r-sm); }
-.dir-glyph .ic { width: 14px; height: 14px; }
 
 .back {
   display: flex; align-items: center; gap: 2px;
@@ -161,17 +255,59 @@
 /* ---------- transfers ---------- */
 
 .tx {
-  display: flex; align-items: center; flex-wrap: wrap; gap: var(--s-2);
+  display: flex; align-items: center; gap: var(--s-2);
   padding: var(--s-2) var(--s-3);
   position: relative;
+  min-height: 50px;
 }
-.tx-pct { flex: 0 0 auto; color: var(--accent-text); font-size: var(--fs-sm);
+.tx-chip {
+  width: 32px; height: 32px; border-radius: var(--r-md);
+  display: grid; place-items: center; flex: 0 0 auto;
+  background: var(--surface-2); color: var(--text-2);
+}
+.tx-chip .ic { width: 16px; height: 16px; }
+.tx-chip.push { background: var(--ok-soft); color: var(--ok); }
+.tx-chip.pull, .tx-chip.upload { background: var(--accent-soft); color: var(--accent-text); }
+.tx-chip.failed { background: var(--err-soft); color: var(--err); }
+.tx-chip.running { background: var(--accent-soft); color: var(--accent-text); }
+.tx-chip.running .ic { animation: spin 1.1s linear infinite; }
+
+.tx-main { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 1px; }
+.tx-name { display: block; font-size: var(--fs-md); font-weight: 500; line-height: 1.4;
+           white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.tx-sub { display: block; color: var(--text-2); font-size: var(--fs-sm); line-height: 1.4;
+          white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+
+.tx-side { flex: 0 0 auto; display: flex; flex-direction: column; align-items: flex-end;
+           gap: 1px; min-width: 52px; }
+.tx-size { font-size: var(--fs-sm); color: var(--text); font-weight: 500;
+           font-variant-numeric: tabular-nums; line-height: 1.4; }
+.tx-size:empty::before { content: "—"; color: var(--text-3); font-weight: 400; }
+.tx-time { font-size: var(--fs-xs); color: var(--text-3); line-height: 1.4;
+           font-variant-numeric: tabular-nums; }
+
+.tx-state { flex: 0 0 auto; display: flex; align-items: center; gap: 5px;
+            min-width: 58px; justify-content: flex-end; }
+.badge {
+  display: inline-flex; align-items: center; gap: 4px;
+  font-size: var(--fs-xs); font-weight: 500; line-height: 1;
+}
+.badge .b-dot { width: 14px; height: 14px; border-radius: 50%; display: grid; place-items: center;
+                flex: 0 0 auto; }
+.badge .b-dot .ic { width: 9px; height: 9px; stroke-width: 2.6; }
+.badge.done { color: var(--ok); }
+.badge.done .b-dot { background: var(--ok-soft); color: var(--ok); }
+.badge.failed { color: var(--err); }
+.badge.failed .b-dot { background: var(--err-soft); color: var(--err); }
+
+.tx-pct { color: var(--accent-text); font-size: var(--fs-xs);
           font-variant-numeric: tabular-nums; }
-.tx-bar { flex: 1 0 100%; height: 3px; border-radius: 2px; background: var(--surface-2);
-          overflow: hidden; margin-top: -4px; }
+.tx-bar { width: 40px; height: 4px; border-radius: 2px; background: var(--surface-2);
+          overflow: hidden; flex: 0 0 auto; }
 .tx-bar i { display: block; height: 100%; width: 0; background: var(--accent);
             border-radius: 2px;
             transition: width var(--t-slow) var(--ease); }
+.tx-bar.indet { width: 40px; }
 .tx-bar.indet i { width: 30%; animation: indet 1.1s ease-in-out infinite; }
 @keyframes indet { from { transform: translateX(-110%); } to { transform: translateX(410%); } }
 
@@ -190,6 +326,24 @@
 .tx-ic.failed { color: var(--err); }
 .tx-ic.running { color: var(--text-2); animation: spin 1.1s linear infinite; }
 
+/* ---------- trust banner ---------- */
+
+.trust {
+  flex: 0 0 auto;
+  display: flex; align-items: center; justify-content: space-between; gap: var(--s-2);
+  margin: 0 var(--s-3) var(--s-2);
+  padding: 7px var(--s-3);
+  border-radius: var(--r-md);
+  background: color-mix(in srgb, var(--ok) 5%, var(--surface));
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--ok) 16%, var(--line));
+  color: var(--text-2); font-size: var(--fs-sm);
+}
+.trust-left { display: flex; align-items: center; gap: 6px; min-width: 0;
+              white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.trust-left .ic { width: 14px; height: 14px; color: var(--ok); flex: 0 0 auto; }
+.trust-right { color: var(--text-3); font-size: var(--fs-xs); flex: 0 0 auto;
+               white-space: nowrap; }
+
 /* ---------- drag & drop ---------- */
 
 .drop-overlay {
@@ -200,15 +354,22 @@
   font-weight: 600; color: var(--accent-text); font-size: var(--fs-base);
 }
 
-/* ---------- footer ---------- */
-
-.foot {
-  flex: 0 0 auto;
-  display: flex; align-items: center; justify-content: space-between; gap: var(--s-2);
-  padding: var(--s-2) var(--s-3);
-  color: var(--text-3); font-size: var(--fs-xs);
+/* The send tile itself turns into the target while a drag is over it. */
+.tile.drop { border-color: color-mix(in srgb, var(--line-strong) 88%, transparent);
+             border-style: dashed; }
+.tile.drop.drop-hot {
+  border-color: var(--accent);
+  border-style: solid;
+  background: var(--accent-soft);
 }
-.foot span { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.drop-tag {
+  position: absolute; inset: 0; z-index: 2;
+  display: grid; place-items: center;
+  background: color-mix(in srgb, var(--accent) 88%, transparent);
+  color: #fff; font-weight: 600; font-size: var(--fs-md);
+  border-radius: var(--r-lg);
+  pointer-events: none;
+}
 
 /* ---------- file list skeleton ---------- */
 
@@ -230,10 +391,16 @@ html.native-glass .card,
 html.native-glass .tile {
   background: color-mix(in srgb, var(--surface) 86%, transparent);
 }
-html.native-glass .tile:hover:not(:disabled) {
+html.native-glass .tile:hover:not(:disabled):not([aria-disabled="true"]) {
   background: color-mix(in srgb, var(--surface-2) 88%, transparent);
+}
+html.native-glass .tile.drop-hot {
+  background: color-mix(in srgb, var(--accent) 16%, transparent);
 }
 html.native-glass textarea,
 html.native-glass .note-box {
   background: color-mix(in srgb, var(--surface) 88%, transparent);
+}
+html.native-glass .trust {
+  background: color-mix(in srgb, var(--ok) 7%, transparent);
 }
