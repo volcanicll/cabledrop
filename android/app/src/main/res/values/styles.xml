@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Light theme. values-night/styles.xml redefines the same name for dark
+     mode, so the OS swaps it automatically and the WebView reports
+     prefers-color-scheme: dark to the page. -->
+<resources>
+    <style name="Theme.CableDrop" parent="@android:style/Theme.Material.Light.NoActionBar">
+        <item name="android:windowBackground">@color/window_bg</item>
+        <item name="android:statusBarColor">@color/window_bg</item>
+        <item name="android:navigationBarColor">@color/window_bg</item>
+        <item name="android:windowLightStatusBar">true</item>
+    </style>
+</resources>

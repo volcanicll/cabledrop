@@ -111,11 +111,13 @@ function render(s) {
   // shared dir
   $('dirPath').textContent = shortPath(s.serveDir);
 
-  // transfers — patched incrementally, never rebuilt wholesale
-  renderTransfers(s.transfers || []);
-
   // error card
   renderError(s);
+
+  // transfers — patched incrementally, never rebuilt wholesale. The error
+  // card is a sibling that shares the fixed 540px height, so when it is up
+  // the list yields a row: 380×540 must never scroll.
+  renderTransfers(s.transfers || [], s.error || (view === 'home' && !s.adbFound) ? 2 : TX_VISIBLE);
 }
 
 /* ---------------- error card ---------------- */
@@ -163,9 +165,12 @@ function renderError(s) {
 // the row displays, so unchanged rows are untouched across polls.
 const txRows = new Map();
 // The list shows the three newest transfers until asked for everything —
-// the 380×540 panel cannot spare the height for all forty records.
+// the 380×540 panel cannot spare the height for all forty records. When the
+// error card is also on screen the cap drops to two, so the two never push
+// the panel into a scroll.
 const TX_VISIBLE = 3;
 let txExpanded = false;
+let txCap = TX_VISIBLE;
 
 function relTimeKey(t) {
   // Relative time moves without a state change; bucket it so the row only
@@ -179,10 +184,11 @@ function txSig(t) {
           relTimeKey(t.at)].join('|');
 }
 
-function renderTransfers(tx) {
+function renderTransfers(tx, cap) {
   const card = $('txCard');
   const clearBtn = $('clearTx');
   const toggleBtn = $('toggleTx');
+  if (cap != null) txCap = cap;
 
   if (!tx.length) {
     for (const rec of txRows.values()) rec.el.remove();
@@ -201,7 +207,7 @@ function renderTransfers(tx) {
   const empty = card.querySelector('.empty');
   if (empty) empty.remove();
 
-  const visible = txExpanded ? tx.length : Math.min(TX_VISIBLE, tx.length);
+  const visible = txExpanded ? tx.length : Math.min(txCap, tx.length);
   const shown = tx.slice(0, visible);
 
   let ref = card.firstElementChild;
@@ -220,7 +226,8 @@ function renderTransfers(tx) {
           <span class="tx-size"></span>
           <span class="tx-time"></span>
         </span>
-        <span class="tx-state"></span>`;
+        <span class="tx-state"></span>
+        <span class="tx-chev"><svg class="ic"><use href="#i-chev-r"/></svg></span>`;
       txRows.set(t.id, rec = { el, sig: '' });
     }
     const sig = txSig(t);
@@ -243,7 +250,7 @@ function renderTransfers(tx) {
   }
 
   clearBtn.hidden = !tx.some((t) => t.state !== 'running');
-  if (tx.length > TX_VISIBLE) {
+  if (tx.length > txCap) {
     toggleBtn.hidden = false;
     toggleBtn.textContent = txExpanded ? '收起' : `查看全部 ${tx.length}`;
   } else {
@@ -446,6 +453,13 @@ $('toggleTx').onclick = () => {
   txExpanded = !txExpanded;
   if (St) renderTransfers(St.transfers || []);
 };
+
+// A row is a disclosure: the chevron points at the one thing the panel had
+// to hide — the tail of a long name or a failure detail.
+$('txCard').addEventListener('click', (ev) => {
+  const row = ev.target.closest('.tx');
+  if (row) row.classList.toggle('open');
+});
 
 $('filesBack').onclick = () => show('home');
 $('filesUp').onclick = () => { if (curParent) loadFiles(curParent); };

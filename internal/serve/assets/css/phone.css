@@ -9,32 +9,120 @@
 html, body { overflow: hidden; }
 
 body.phone {
+  /* The phone page inherits tokens.css, and those tokens are sized for the
+     380x540 desktop panel: a 13px base with a 11.5px small. Reusing them here
+     put a desk-density type scale on a phone, which reads as a shrunken panel
+     rather than an app — 11.5px secondary text is comfortable on a monitor and
+     small in a hand. Restating the scale for this subtree is the whole fix:
+     every rule below already reads these variable names, so nothing else has
+     to change. Android's own body size is 14-16sp; this sits there. */
+  --fs-xs: 12px;
+  --fs-sm: 13px;
+  --fs-md: 14.5px;
+  --fs-base: 15px;
+  --fs-lg: 16.5px;
+
+  /* Roomier than the panel's 4px rhythm, so cards and rows are comfortable to
+     hit with a thumb rather than precise with a cursor. */
+  --s-1: 6px;
+  --s-2: 10px;
+  --s-3: 14px;
+  --s-4: 18px;
+  --s-5: 22px;
+
+  --r-sm: 9px;
+  --r-md: 12px;
+  --r-lg: 16px;
+
   position: fixed;
+  /* Explicit offsets rather than `inset: 0`: `inset` is Chrome 87+, and when it
+     is dropped a fixed box with auto offsets shrinks to fit its content — the
+     page then occupies a strip down the left of the screen with the rest of
+     the viewport showing through. Four offsets also pin the height, which is
+     what the 100dvh line below is for on engines that have it. */
+  top: 0;
+  right: 0;
+  bottom: 0;
+  left: 0;
   inset: 0;
-  /* 100dvh tracks the dynamic viewport (URL bar, keyboard); inset:0 already
-     follows the layout viewport — the dvh line is the belt to its braces. */
+  /* 100dvh tracks the dynamic viewport (URL bar, keyboard); 100vh is the
+     fallback for engines without it (Chrome < 108) — and with all four
+     offsets set above, the height is pinned either way. */
+  height: 100vh;
   height: 100dvh;
   display: flex;
   flex-direction: column;
   background: var(--bg);
 }
 
+/* Spacing between flex children is done with margins rather than `gap`.
+   Flex `gap` only landed in Chrome 84; below that the declaration is accepted
+   but ignored, so every row on this page loses its spacing at once. The
+   `* + *` selector expresses the same thing in CSS that has always worked. */
+
 /* ---------- header ---------- */
 
 .p-head {
   flex: 0 0 auto;
-  display: flex; align-items: center; gap: var(--s-2);
+  display: flex; align-items: center;
   padding: calc(10px + env(safe-area-inset-top)) calc(14px + env(safe-area-inset-right))
            10px calc(14px + env(safe-area-inset-left));
   background: var(--surface);
   border-bottom: 1px solid var(--line);
 }
-.p-logo { width: 34px; height: 34px; border-radius: var(--r-md); }
-.p-head-text { min-width: 0; }
-.p-title { display: block; font-weight: 700; font-size: 15px; line-height: 1.4;
+.p-head > * + * { margin-left: var(--s-2); }
+.p-logo { width: 36px; height: 36px; border-radius: var(--r-md); }
+.p-head-text { flex: 1; min-width: 0; }
+.p-title { display: block; font-weight: 700; font-size: var(--fs-lg); line-height: 1.35;
            letter-spacing: -0.01em; }
-.p-sub { display: block; color: var(--text-2); font-size: var(--fs-sm); line-height: 1.4;
+.p-sub { display: flex; align-items: center; color: var(--text-2); font-size: var(--fs-sm);
+         line-height: 1.4;
          white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+/* Same connection dot the panel uses, so the two surfaces read as one app. */
+.p-dot { flex: 0 0 auto; width: 6px; height: 6px; border-radius: 50%;
+         background: var(--text-3); margin-right: 6px;
+         transition: background var(--t-med) var(--ease), box-shadow var(--t-med) var(--ease); }
+.p-dot.on { background: var(--ok);
+            box-shadow: 0 0 0 3px var(--ok-soft); }
+.p-dot.err { background: var(--err); }
+
+/* The Mac ⇄ Android motif, echoing the panel's header diagram. */
+.p-link { flex: 0 0 auto; display: flex; align-items: center;
+          color: var(--text-3); }
+.p-link > * + * { margin-left: 3px; }
+.p-link .ic { width: 15px; height: 15px; }
+.p-link-line { width: 12px; border-top: 1.5px solid currentColor;
+               border-radius: 1px; opacity: 0.6; }
+
+/* ---------- trust strip ---------- */
+
+.p-trust {
+  flex: 0 0 auto;
+  display: flex; align-items: center;
+  padding: 6px calc(14px + env(safe-area-inset-right)) 6px calc(14px + env(safe-area-inset-left));
+  background: var(--ok-soft);
+  color: var(--text-2); font-size: var(--fs-sm);
+  border-bottom: 1px solid var(--line);
+}
+.p-trust > * + * { margin-left: 6px; }
+.p-trust .ic { color: var(--ok); flex: 0 0 auto; }
+
+/* ---------- offline banner ---------- */
+
+.p-offline {
+  display: flex; align-items: flex-start;
+  background: var(--err-soft);
+  box-shadow: none;
+}
+.p-offline > * + * { margin-left: var(--s-2); }
+.p-offline .ic { flex: 0 0 auto; width: 18px; height: 18px; color: var(--err);
+                 margin-top: 1px; }
+.p-offline-text { flex: 1; min-width: 0; display: flex; flex-direction: column;
+                  font-size: var(--fs-sm); line-height: 1.5; color: var(--text-2); }
+.p-offline-text > * + * { margin-top: 2px; }
+.p-offline-text b { color: var(--err); font-size: var(--fs-md); }
+.p-offline .btn.sm { flex: 0 0 auto; width: auto; min-height: 46px; padding: 0 18px;
+                     margin-top: -2px; }
 
 /* ---------- scroll column ---------- */
 
@@ -44,11 +132,24 @@ body.phone {
   overscroll-behavior-y: contain;
   -webkit-overflow-scrolling: touch;
   /* Safe areas on all four sides: top/left/right for landscape notches, a
-     generous bottom so the last element clears the gesture bar. */
+     generous bottom so the last element clears the gesture bar.
+     The `max()` variant lives behind @supports rather than in front of a
+     fallback line: a declaration containing env() is not dropped at parse time
+     by an old engine, it is kept and fails when it is computed — and a value
+     that fails at computed-value time becomes `unset`, taking any fallback
+     written above it down as well. */
   padding: var(--s-3) calc(14px + env(safe-area-inset-right))
-           calc(24px + max(env(safe-area-inset-bottom), 12px))
+           calc(24px + env(safe-area-inset-bottom))
            calc(14px + env(safe-area-inset-left));
   touch-action: pan-y;
+}
+
+@supports (padding: max(1px, 2px)) {
+  .p-scroll {
+    padding: var(--s-3) calc(14px + env(safe-area-inset-right))
+             calc(24px + max(env(safe-area-inset-bottom), 12px))
+             calc(14px + env(safe-area-inset-left));
+  }
 }
 
 .p-col {
@@ -66,9 +167,12 @@ body.phone {
   margin-bottom: var(--s-2);
 }
 .p-label {
+  display: flex; align-items: center;
   font-size: var(--fs-sm); font-weight: 600; color: var(--text-2);
   margin-bottom: var(--s-2);
 }
+.p-label > * + * { margin-left: 5px; }
+.p-label .ic { color: var(--text-3); }
 
 .p-note-card { background: var(--accent-soft); }
 .p-note-card .p-label { color: var(--accent-text); }
@@ -78,7 +182,7 @@ body.phone {
 }
 
 .p-note {
-  font: 13px/1.7 ui-monospace, SFMono-Regular, Menlo, monospace;
+  font: var(--fs-md)/1.7 ui-monospace, SFMono-Regular, Menlo, monospace;
   background: var(--surface-2);
   border-radius: var(--r-md);
   padding: 10px 11px;
@@ -86,13 +190,15 @@ body.phone {
   overflow: auto;
   overscroll-behavior: contain;
   white-space: pre-wrap;
-  /* URLs have no spaces to break at; without this they run past the card. */
+  /* URLs have no spaces to break at; without this they run past the card.
+     `anywhere` is Chrome 80+, so `break-word` carries the older engines. */
+  overflow-wrap: break-word;
   overflow-wrap: anywhere;
   margin-bottom: var(--s-2);
 }
 
-body.phone textarea { min-height: 92px; font-size: 13.5px; }
-body.phone .btn { width: 100%; min-height: 44px; border-radius: var(--r-md); font-size: 14px; }
+body.phone textarea { min-height: 104px; font-size: var(--fs-md); }
+body.phone .btn { width: 100%; min-height: 48px; border-radius: var(--r-md); font-size: var(--fs-md); }
 body.phone .btn + .btn { margin-top: var(--s-2); }
 body.phone .hint { font-size: var(--fs-sm); }
 
@@ -102,8 +208,8 @@ body.phone .hint { font-size: var(--fs-sm); }
    invisibly, and the label text reads as the control. */
 .p-filepick {
   position: relative;
-  display: flex; align-items: center; gap: var(--s-2);
-  min-height: 46px;
+  display: flex; align-items: center;
+  min-height: 52px;
   padding: var(--s-2);
   border-radius: var(--r-md);
   background: var(--surface-2);
@@ -113,7 +219,9 @@ body.phone .hint { font-size: var(--fs-sm); }
   cursor: pointer;
 }
 .p-filepick input[type=file] {
-  position: absolute; inset: 0;
+  position: absolute;
+  top: 0; right: 0; bottom: 0; left: 0;
+  inset: 0;
   width: 100%; height: 100%;
   opacity: 0;
   cursor: pointer;
@@ -127,9 +235,10 @@ body.phone .hint { font-size: var(--fs-sm); }
 /* ---------- file list ---------- */
 
 .p-path {
-  display: flex; align-items: center; gap: var(--s-1);
+  display: flex; align-items: center;
   margin-bottom: var(--s-1);
 }
+.p-path > * + * { margin-left: var(--s-1); }
 .p-path-crumb {
   flex: 1; min-width: 0;
   font-size: var(--fs-sm); color: var(--text-2);
@@ -138,8 +247,8 @@ body.phone .hint { font-size: var(--fs-sm); }
 
 .p-list { display: flex; flex-direction: column; }
 .p-item {
-  display: flex; align-items: center; gap: var(--s-2);
-  min-height: 48px;
+  display: flex; align-items: center;
+  min-height: 56px;
   padding: var(--s-2) 2px;
   position: relative;
   color: inherit; text-decoration: none;
@@ -156,6 +265,7 @@ body.phone .hint { font-size: var(--fs-sm); }
   .p-item:hover { background: var(--surface-2); }
 }
 .p-item:active { opacity: 0.55; }
+.p-item > * + * { margin-left: var(--s-2); }
 .p-item-main { flex: 1; min-width: 0; }
 .p-item-title { display: block; font-size: var(--fs-md); line-height: 1.45;
                 white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
@@ -175,10 +285,13 @@ body.phone .hint { font-size: var(--fs-sm); }
   bottom: calc(20px + env(safe-area-inset-bottom));
   transform: translateX(-50%) translateY(8px);
   z-index: 60;
+  /* `min()` is Chrome 79+; 86vw is the same answer on any phone-sized screen
+     and is expressed in CSS every engine understands. */
+  max-width: 86vw;
   max-width: min(86vw, 420px);
   padding: 9px 16px;
   border-radius: var(--r-full);
-  background: color-mix(in srgb, var(--text) 88%, transparent);
+  background: var(--toast-bg);
   color: var(--bg);
   font-size: var(--fs-md);
   text-align: center;
@@ -188,5 +301,6 @@ body.phone .hint { font-size: var(--fs-sm); }
 }
 .p-toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
 
-.fs-skel { display: flex; flex-direction: column; gap: var(--s-1); padding: var(--s-1) 0; }
+.fs-skel { display: flex; flex-direction: column; padding: var(--s-1) 0; }
+.fs-skel > * + * { margin-top: var(--s-1); }
 .fs-skel-row { height: 34px; }

@@ -28,7 +28,8 @@ function toast(msg) {
 /* Copying needs a user gesture on iOS and some Android browsers, so every
  * copy goes through a real tap rather than happening on load. */
 async function copyText(text) {
-  if (!text) return;
+  if (!text) { toast('没有可复制的内容'); return; }
+  let ok = true;
   try {
     await navigator.clipboard.writeText(text);
   } catch (_) {
@@ -40,16 +41,17 @@ async function copyText(text) {
     ta.style.opacity = '0';
     document.body.appendChild(ta);
     ta.select();
-    try { document.execCommand('copy'); } catch (_) { }
+    try { ok = document.execCommand('copy'); } catch (_) { ok = false; }
     document.body.removeChild(ta);
   }
-  toast('已复制到手机');
+  toast(ok ? '已复制到手机' : '复制失败，请长按手动选择');
 }
 
 /* ---------------- polling ---------------- */
 
 let lastNoteAt = 0;
 let lastClip = '';
+let online = null;
 
 async function refresh() {
   try {
@@ -59,6 +61,7 @@ async function refresh() {
       api('/api/note'),
     ]);
 
+    setOnline(true);
     $('sub').textContent = st && st.device
       ? '已连接 · ' + st.device
       : '已连接 · 准备好接收';
@@ -80,8 +83,19 @@ async function refresh() {
     }
     if (!noteText) $('noteCard').hidden = true;
   } catch (e) {
-    $('sub').textContent = '未连接到电脑';
+    setOnline(false);
   }
+}
+
+// One switch drives the dot, the subtitle and the offline banner, so the
+// page can never show "connected" in three places and "offline" in a fourth.
+function setOnline(on) {
+  if (on === online) return;
+  online = on;
+  $('connDot').classList.toggle('on', on);
+  $('connDot').classList.toggle('err', !on);
+  $('offline').hidden = on;
+  if (!on) $('sub').textContent = '未连接到电脑';
 }
 
 /* ---------------- shared folder, with subfolders ---------------- */
@@ -233,6 +247,8 @@ $('sendMac').onclick = async () => {
 };
 
 $('reload').onclick = () => { loadFiles(curSub); refresh(); };
+
+$('retryConn').onclick = () => { refresh(); loadFiles(curSub); };
 
 /* ---------------- boot ---------------- */
 

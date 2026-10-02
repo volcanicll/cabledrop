@@ -22,18 +22,43 @@
   <symbol id="i-up" viewBox="0 0 24 24"><path d="M12 20V5"/><path d="M6 11l6-6 6 6"/></symbol>
   <symbol id="i-chev" viewBox="0 0 24 24"><path d="M14.5 6 9 12l5.5 6"/></symbol>
   <symbol id="i-refresh" viewBox="0 0 24 24"><path d="M20.5 12a8.5 8.5 0 1 1-2.5-6"/><path d="M20.5 3.5v5h-5"/></symbol>
+  <symbol id="i-clip" viewBox="0 0 24 24"><rect x="8" y="3.5" width="8" height="4" rx="1.4"/><path d="M16 5.5h1.6A1.9 1.9 0 0 1 19.5 7.4v11.2a1.9 1.9 0 0 1-1.9 1.9H6.4a1.9 1.9 0 0 1-1.9-1.9V7.4A1.9 1.9 0 0 1 6.4 5.5H8"/></symbol>
+  <symbol id="i-shield" viewBox="0 0 24 24"><path d="M12 3.5 19 6v5.5c0 4.6-3 7.6-7 9-4-1.4-7-4.4-7-9V6z"/><path d="m9.2 11.8 2 2 3.6-4"/></symbol>
+  <symbol id="i-check" viewBox="0 0 24 24"><path d="M4.5 12.5 10 18l9.5-11"/></symbol>
+  <symbol id="i-alert" viewBox="0 0 24 24"><path d="M12 3.8 21 19.2H3z"/><path d="M12 10v4M12 17h.01"/></symbol>
+  <symbol id="i-laptop" viewBox="0 0 24 24"><rect x="4.5" y="5" width="15" height="10" rx="1.6"/><path d="M2.5 18h19"/></symbol>
+  <symbol id="i-phone" viewBox="0 0 24 24"><rect x="6" y="2.5" width="12" height="19" rx="2.6"/><path d="M10.6 18.6h2.8"/></symbol>
 </svg>
 
 <header class="p-head">
   <span class="chip p-logo" aria-hidden="true"><svg class="ic"><use href="#i-cable"/></svg></span>
   <div class="p-head-text">
     <span class="p-title">CableDrop</span>
-    <span class="p-sub" id="sub">连接中…</span>
+    <span class="p-sub"><span class="p-dot" id="connDot"></span><span id="sub">连接中…</span></span>
   </div>
+  <span class="p-link" aria-hidden="true">
+    <svg class="ic sm-ic"><use href="#i-laptop"/></svg>
+    <span class="p-link-line"></span>
+    <svg class="ic sm-ic"><use href="#i-phone"/></svg>
+  </span>
 </header>
+
+<div class="p-trust">
+  <svg class="ic sm-ic"><use href="#i-shield"/></svg>
+  <span>USB 直连 · 数据不经过网络</span>
+</div>
 
 <main class="p-scroll" id="scroller">
   <div class="p-col">
+
+    <section class="p-card p-offline" id="offline" hidden>
+      <svg class="ic"><use href="#i-alert"/></svg>
+      <span class="p-offline-text">
+        <b>未连接到电脑</b>
+        <span>请确认数据线已插好、电脑端 CableDrop 正在运行，然后下拉或点刷新。</span>
+      </span>
+      <button class="btn sm" id="retryConn">重试</button>
+    </section>
 
     <section class="p-card p-note-card" id="noteCard" hidden>
       <div class="p-label">电脑发来的内容</div>
@@ -44,7 +69,7 @@
     </section>
 
     <section class="p-card">
-      <div class="p-label">电脑剪贴板</div>
+      <div class="p-label"><svg class="ic sm-ic"><use href="#i-clip"/></svg>电脑剪贴板</div>
       <div class="p-note selectable" id="clipText">（空）</div>
       <button class="btn" id="copyClip">
         <svg class="ic sm-ic"><use href="#i-copy"/></svg>复制到手机
@@ -52,7 +77,7 @@
     </section>
 
     <section class="p-card">
-      <div class="p-label">发到电脑</div>
+      <div class="p-label"><svg class="ic sm-ic"><use href="#i-send"/></svg>发到电脑</div>
       <textarea id="toMac" placeholder="粘贴或输入文本，发送后直接进电脑剪贴板" spellcheck="false"></textarea>
       <button class="btn" id="sendMac">
         <svg class="ic sm-ic"><use href="#i-send"/></svg>发送到电脑
@@ -60,7 +85,7 @@
     </section>
 
     <section class="p-card">
-      <div class="p-label">传文件到电脑</div>
+      <div class="p-label"><svg class="ic sm-ic"><use href="#i-up"/></svg>传文件到电脑</div>
       <label class="p-filepick">
         <input type="file" id="fileInput" multiple>
         <span id="filePickText">选择要上传的文件</span>
@@ -70,7 +95,7 @@
     </section>
 
     <section class="p-card">
-      <div class="p-label">电脑上的文件</div>
+      <div class="p-label"><svg class="ic sm-ic"><use href="#i-folder"/></svg>电脑上的文件</div>
       <div class="p-path" id="filePath" hidden>
         <button class="icon-btn" id="filesUp" title="上一级" aria-label="上一级">
           <svg class="ic sm-ic"><use href="#i-chev"/></svg>
@@ -83,7 +108,7 @@
       </button>
     </section>
 
-    <div class="p-foot">通过 USB 线连接 · 不经过网络</div>
+    <div class="p-foot">CableDrop · 一根线传文件与文字</div>
   </div>
 </main>
 

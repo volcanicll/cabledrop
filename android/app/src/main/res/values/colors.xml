@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- The page's own canvas colour (tokens.css bg). Matching it here means
+     the window behind the WebView is the same colour, so the cold-start
+     frame and any gap below short content never flash a different shade. -->
+<resources>
+    <color name="window_bg">#F5F5F7</color>
+</resources>

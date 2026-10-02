@@ -26,10 +26,15 @@ svg { display: block; }
       stroke-linecap: round; stroke-linejoin: round; }
 .ic-lg { width: 22px; height: 22px; }
 
-/* Keyboard focus is always visible; pointer clicks stay quiet. */
-:focus { outline: none; }
-:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px;
-                 border-radius: var(--r-sm); }
+/* Keyboard focus is always visible; pointer clicks stay quiet.
+   `:focus-visible` is Chrome 86+, and `@supports selector()` is Chrome 83+.
+   Gating the outline removal on that means an older engine keeps its default
+   focus ring instead of losing the indicator altogether. */
+@supports selector(:focus-visible) {
+  :focus { outline: none; }
+  :focus-visible { outline: 2px solid var(--accent); outline-offset: 1px;
+                   border-radius: var(--r-sm); }
+}
 
 /* ---------- shared primitives ---------- */
 
@@ -43,7 +48,7 @@ svg { display: block; }
 .chip.off { background: var(--surface-2); color: var(--text-3); }
 
 .btn {
-  display: inline-flex; align-items: center; justify-content: center; gap: 6px;
+  display: inline-flex; align-items: center; justify-content: center;
   min-height: 34px;
   padding: 0 14px;
   border-radius: var(--r-md);
@@ -60,6 +65,9 @@ svg { display: block; }
 .btn.ghost:hover:not(:disabled) { background: var(--surface-2); }
 .btn.sm { min-height: 28px; padding: 0 10px; font-size: var(--fs-sm);
           border-radius: var(--r-sm); }
+/* Buttons lead with their icon; spacing it with a margin rather than flex
+   `gap` keeps the ~30 of them spaced on engines below Chrome 84 too. */
+.btn > .ic { margin-right: 6px; }
 
 .link { color: var(--accent-text); font-size: var(--fs-sm); min-height: 28px;
         padding: 0 2px; }
@@ -73,9 +81,13 @@ svg { display: block; }
               transform var(--t-fast) var(--ease);
 }
 /* The visible control is 30px; the hit target reaches 40px without
-   overlapping its neighbours. */
+   overlapping its neighbours. Offsets are spelled out because `inset` is
+   Chrome 87+ — dropped, this pseudo-element has no box at all. */
 .icon-btn::after {
-  content: ""; position: absolute; inset: -5px; border-radius: var(--r-sm);
+  content: ""; position: absolute;
+  top: -5px; right: -5px; bottom: -5px; left: -5px;
+  inset: -5px;
+  border-radius: var(--r-sm);
 }
 .icon-btn:hover { background: var(--surface-2); color: var(--text); }
 .icon-btn:active { transform: scale(0.92); }
@@ -83,14 +95,14 @@ svg { display: block; }
 @keyframes spin { to { transform: rotate(360deg); } }
 
 .empty {
-  padding: var(--s-5) var(--s-3);
+  padding: 12px var(--s-3);
   text-align: center;
   color: var(--text-3);
   font-size: var(--fs-sm);
 }
-.empty .ic { width: 22px; height: 22px; margin: 0 auto var(--s-2); opacity: 0.7; }
+.empty .ic { width: 22px; height: 22px; margin: 0 auto 6px; opacity: 0.7; }
 .empty-title { display: block; color: var(--text-2); font-size: var(--fs-md); }
-.empty-hint { display: block; margin-top: 3px; font-size: var(--fs-sm); }
+.empty-hint { display: block; margin-top: 2px; font-size: var(--fs-sm); line-height: 1.5; }
 
 textarea {
   -webkit-user-select: text; user-select: text;
@@ -120,10 +132,15 @@ textarea:focus { box-shadow: inset 0 0 0 1.5px var(--accent), 0 0 0 3px var(--ac
   background: var(--surface-2);
 }
 .skel::after {
-  content: ""; position: absolute; inset: 0;
+  content: ""; position: absolute;
+  top: 0; right: 0; bottom: 0; left: 0;
+  inset: 0;
   transform: translateX(-100%);
-  background: linear-gradient(90deg, transparent,
-              color-mix(in srgb, var(--text) 6%, transparent), transparent);
+  /* A plain token rather than color-mix(): see the note in tokens.css, and note
+     that a gradient stop using color-mix() inside var() would not be dropped
+     at parse time but would fail at computed-value time, leaving the shimmer
+     with no background at all. */
+  background: linear-gradient(90deg, transparent, var(--line), transparent);
   animation: shimmer 1.4s ease-in-out infinite;
 }
 @keyframes shimmer { to { transform: translateX(100%); } }

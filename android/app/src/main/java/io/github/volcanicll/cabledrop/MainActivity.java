@@ -5,6 +5,7 @@ import android.app.DownloadManager;
 import android.content.Context;
 import android.content.Intent;
 import android.content.SharedPreferences;
+import android.content.res.Configuration;
 import android.net.Uri;
 import android.os.Bundle;
 import android.os.Environment;
@@ -42,7 +43,10 @@ public class MainActivity extends Activity {
     private static final int FILE_CHOOSER = 1001;
 
     private WebView web;
+    private FrameLayout root;
     private LinearLayout status;
+    private TextView statusTitle;
+    private TextView statusBody;
     private EditText portBox;
     private SharedPreferences prefs;
     private ValueCallback<Uri[]> filePick;
@@ -54,7 +58,7 @@ public class MainActivity extends Activity {
 
         // fitsSystemWindows keeps both the page and the status screen below
         // the status bar: targetSdk 35+ draws edge-to-edge by default.
-        FrameLayout root = new FrameLayout(this);
+        root = new FrameLayout(this);
         root.setFitsSystemWindows(true);
 
         web = new WebView(this);
@@ -72,6 +76,16 @@ public class MainActivity extends Activity {
         WebSettings s = web.getSettings();
         s.setJavaScriptEnabled(true);
         s.setDomStorageEnabled(true);
+        // Debug builds get a DevTools socket so the page can be inspected on a
+        // real phone (`adb forward` the webview_devtools_remote socket, then
+        // chrome://inspect). Release builds do not: an open debugging port on
+        // a loopback page is still an open port.
+        boolean debuggable =
+                (getApplicationInfo().flags & android.content.pm.ApplicationInfo.FLAG_DEBUGGABLE) != 0;
+        WebView.setWebContentsDebuggingEnabled(debuggable);
+        // Match the page canvas so the frame between cold start and first
+        // paint (and any gap under short content) is not a white flash.
+        web.setBackgroundColor(resolveWindowBg());
 
         web.setWebViewClient(new WebViewClient() {
             @Override
@@ -154,21 +168,24 @@ public class MainActivity extends Activity {
         box.setOrientation(LinearLayout.VERTICAL);
         box.setGravity(Gravity.CENTER);
         box.setPadding(dp(32), dp(32), dp(32), dp(32));
-        box.setBackgroundColor(0xFFF4F4F6);
+        boolean night = isNightMode();
+        box.setBackgroundColor(night ? 0xFF131315 : 0xFFF5F5F7);
+        int titleColor = night ? 0xFFF2F2F5 : 0xFF1D1D1F;
+        int bodyColor = night ? 0xFFA2A2AB : 0xFF6E6E73;
 
-        TextView title = new TextView(this);
-        title.setText("CableDrop 未连接");
-        title.setTextSize(20);
-        title.setTextColor(0xFF1D1D1F);
-        title.setGravity(Gravity.CENTER);
+        statusTitle = new TextView(this);
+        statusTitle.setText("CableDrop 未连接");
+        statusTitle.setTextSize(20);
+        statusTitle.setTextColor(titleColor);
+        statusTitle.setGravity(Gravity.CENTER);
 
-        TextView body = new TextView(this);
-        body.setText("用 USB 线连接手机和电脑，电脑端打开 CableDrop\n并保持手机网页开启，然后点下面的重试。");
-        body.setTextSize(14);
-        body.setLineSpacing(dp(3), 1f);
-        body.setTextColor(0xFF6E6E73);
-        body.setGravity(Gravity.CENTER);
-        body.setPadding(0, dp(10), 0, 0);
+        statusBody = new TextView(this);
+        statusBody.setText("用 USB 线连接手机和电脑，电脑端打开 CableDrop\n并保持手机网页开启，然后点下面的重试。");
+        statusBody.setTextSize(14);
+        statusBody.setLineSpacing(dp(3), 1f);
+        statusBody.setTextColor(bodyColor);
+        statusBody.setGravity(Gravity.CENTER);
+        statusBody.setPadding(0, dp(10), 0, 0);
 
         LinearLayout row = new LinearLayout(this);
         row.setOrientation(LinearLayout.HORIZONTAL);
@@ -198,13 +215,69 @@ public class MainActivity extends Activity {
         retryLp.setMargins(dp(10), 0, 0, 0);
         row.addView(retry, retryLp);
 
-        box.addView(title);
-        box.addView(body);
+        box.addView(statusTitle);
+        box.addView(statusBody);
         LinearLayout.LayoutParams rowLp = new LinearLayout.LayoutParams(
                 ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT);
         rowLp.topMargin = dp(20);
         box.addView(row, rowLp);
         return box;
+    }
+
+    /** Whether the system is in dark mode, so the native screens can match
+     *  the page's own dark palette instead of flashing white. */
+    private boolean isNightMode() {
+        int mask = getResources().getConfiguration().uiMode
+                & Configuration.UI_MODE_NIGHT_MASK;
+        return mask == Configuration.UI_MODE_NIGHT_YES;
+    }
+
+    /** Whether the page can honour prefers-color-scheme.
+     *
+     *  The WebView an app gets is the ROM's, and ROMs pin them for years: the
+     *  phone this was developed against serves its pages from an AOSP WebView
+     *  stuck at Chrome 75, where the media query does not exist and the page
+     *  renders light whatever the system says. Framing a light page in a dark
+     *  window looks worse than not following dark mode at all, so the frame
+     *  follows the page rather than the system in that case.
+     *
+     *  prefers-color-scheme landed in Chrome 76. */
+    private boolean pageSupportsDark() {
+        if (android.os.Build.VERSION.SDK_INT < android.os.Build.VERSION_CODES.O) {
+            return false;
+        }
+        android.content.pm.PackageInfo pkg = WebView.getCurrentWebViewPackage();
+        if (pkg == null || pkg.versionName == null) {
+            return false;
+        }
+        String major = pkg.versionName.split("\\.")[0];
+        try {
+            return Integer.parseInt(major) >= 76;
+        } catch (NumberFormatException e) {
+            return false;
+        }
+    }
+
+    private int resolveWindowBg() {
+        return (isNightMode() && pageSupportsDark()) ? 0xFF131315 : 0xFFF5F5F7;
+    }
+
+    /** The activity handles uiMode itself (see the manifest), so it is not
+     *  recreated when the user flips dark mode: re-apply the native colours
+     *  here so the frame and the offline screen keep matching the page. */
+    @Override
+    public void onConfigurationChanged(Configuration newConfig) {
+        super.onConfigurationChanged(newConfig);
+        web.setBackgroundColor(resolveWindowBg());
+        rebuildStatusColors();
+    }
+
+    private void rebuildStatusColors() {
+        if (status == null || statusTitle == null) return;
+        boolean night = isNightMode();
+        status.setBackgroundColor(night ? 0xFF131315 : 0xFFF5F5F7);
+        statusTitle.setTextColor(night ? 0xFFF2F2F5 : 0xFF1D1D1F);
+        statusBody.setTextColor(night ? 0xFFA2A2AB : 0xFF6E6E73);
     }
 
     private void showStatus() {
