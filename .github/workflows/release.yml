@@ -264,12 +264,42 @@ jobs:
         with:
           path: artifacts
 
+      - name: Note the version
+        run: echo "VERSION=$(make -s version)" >> "$GITHUB_ENV"
+
       - name: Flatten
         run: |
           set -euo pipefail
           mkdir -p release
           find artifacts -type f -exec cp {} release/ \;
           ls -la release
+
+      - name: Add stable-named aliases
+        run: |
+          set -euo pipefail
+          cd release
+          # The landing page links to releases/latest/download/<name>, which
+          # needs the name to be the same on every release — so alongside the
+          # versioned artifacts, publish an unversioned copy of each one the
+          # site points at. The versioned files stay for anyone pinning a
+          # specific build.
+          declare -A alias=(
+            ["CableDrop-${VERSION}.dmg"]="CableDrop-macos-universal.dmg"
+            ["CableDrop-${VERSION}-macos-universal.zip"]="CableDrop-macos-universal.zip"
+            ["CableDrop-${VERSION}-windows-amd64.zip"]="CableDrop-windows-amd64.zip"
+            ["CableDrop-${VERSION}-windows-arm64.zip"]="CableDrop-windows-arm64.zip"
+            ["CableDrop-${VERSION}-linux-amd64.tar.gz"]="CableDrop-linux-amd64.tar.gz"
+            ["CableDrop-${VERSION}.apk"]="CableDrop.apk"
+          )
+          for src in "${!alias[@]}"; do
+            if [ -f "$src" ]; then
+              cp "$src" "${alias[$src]}"
+              echo "  ${alias[$src]}  <-  ${src}"
+            else
+              echo "missing expected artifact: $src" >&2
+              exit 1
+            fi
+          done
 
       - name: Checksums
         run: |
