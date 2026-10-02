@@ -7,6 +7,8 @@
 <meta name="description" content="CableDrop moves files and clipboard text between a Mac or PC and an Android phone over a single USB cable. No network, no cloud, nothing to install on the phone.">
 <link rel="icon" href="../docs/icon-256.png">
 <link rel="stylesheet" href="style.css">
+<script src="i18n.js"></script>
+<script>document.documentElement.classList.add('js');</script>
 </head>
 <body>
 
@@ -16,12 +18,16 @@
       <img src="../docs/icon-256.png" width="24" height="24" alt="">
       <span>CableDrop</span>
     </a>
-    <nav class="bar-nav" aria-label="Sections">
-      <a href="#screenshots">Screenshots</a>
-      <a href="#how">How it works</a>
-      <a href="#features">Features</a>
-      <a href="#apk">Android app</a>
-      <a href="#download">Download</a>
+    <nav class="bar-nav" data-i18n-attr="aria-label:nav.screenshots" aria-label="Sections">
+      <a href="#screenshots" data-i18n="nav.screenshots">Screenshots</a>
+      <a href="#how" data-i18n="nav.how">How it works</a>
+      <a href="#features" data-i18n="nav.features">Features</a>
+      <a href="#apk" data-i18n="nav.apk">Android app</a>
+      <a href="#download" data-i18n="nav.download">Download</a>
+      <div class="lang-switch" role="group" aria-label="Language" data-i18n-attr="aria-label:nav.langLabel">
+        <button type="button" data-lang-btn="zh" aria-pressed="false">中</button>
+        <button type="button" data-lang-btn="en" aria-pressed="false">EN</button>
+      </div>
       <a class="bar-gh" href="https://github.com/volcanicll/cabledrop">
         <svg viewBox="0 0 16 16" width="15" height="15" aria-hidden="true"><path fill="currentColor" d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82a5.1 5.1 0 0 1 2.8 0c1.53-1.03 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A7.995 7.995 0 0 0 16 8c0-4.42-3.58-8-8-8Z"/></svg>
         GitHub
@@ -34,56 +40,57 @@
 
   <section class="hero wrap">
     <div class="hero-copy">
-      <p class="eyebrow">USB direct · nothing in the middle</p>
-      <h1>Move files and text between your computer and an Android&nbsp;phone over <em>one USB cable</em>.</h1>
-      <p class="lede">No network. No cloud. Nothing to install on the phone. Plug the cable in, open a page on the phone, and both directions work.</p>
+      <p class="eyebrow" data-i18n="hero.eyebrow">USB direct · nothing in the middle</p>
+      <h1 data-i18n-html="hero.title">Move files and text between your computer and an Android&nbsp;phone over <em>one USB cable</em>.</h1>
+      <p class="lede" data-i18n="hero.lede">No network. No cloud. Nothing to install on the phone. Plug the cable in, open a page on the phone, and both directions work.</p>
       <div class="cta">
-        <a class="btn btn-primary" href="#download">
+        <a class="btn btn-primary" href="https://github.com/volcanicll/cabledrop/releases/latest/download/CableDrop-macos-universal.dmg">
           <svg viewBox="0 0 16 16" width="15" height="15" aria-hidden="true"><path fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" d="M8 2v8m0 0 3-3m-3 3-3-3M3 13h10"/></svg>
-          Download for macOS
+          <span data-i18n="hero.ctaMac">Download for macOS</span>
         </a>
-        <a class="btn" href="https://github.com/volcanicll/cabledrop">View source</a>
+        <a class="btn" href="#download" data-i18n="hero.ctaAll">All platforms</a>
+        <a class="btn" href="https://github.com/volcanicll/cabledrop" data-i18n="hero.ctaSource">View source</a>
       </div>
-      <p class="note">MIT licensed · macOS 12+, Windows 10+, Linux (GTK3) · Android 7+</p>
+      <p class="note" data-i18n="hero.note">MIT licensed · macOS 12+, Windows 10+, Linux (GTK3) · Android 7+</p>
     </div>
     <div class="hero-shot">
       <img src="../docs/panel-light.png" width="380" height="540" alt="The CableDrop menu bar panel: a connected Android phone at the top, four action cards, a save-location card, the recent transfers list, and a USB trust banner.">
     </div>
   </section>
 
-  <section class="pillars wrap">
+  <section class="pillars wrap reveal">
     <article class="pillar">
       <span class="ic ic-blue" aria-hidden="true">
         <svg viewBox="0 0 24 24" width="22" height="22"><path fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" d="M12 19V5m0 0-6 6m6-6 6 6"/></svg>
       </span>
-      <h3>Files, both directions</h3>
-      <p>Drag onto the panel or pick files to send. Browse the phone's storage and pull anything back.</p>
+      <h3 data-i18n="pillar.files.title">Files, both directions</h3>
+      <p data-i18n="pillar.files.body">Drag onto the panel or pick files to send. Browse the phone's storage and pull anything back.</p>
     </article>
     <article class="pillar">
       <span class="ic ic-purple" aria-hidden="true">
         <svg viewBox="0 0 24 24" width="22" height="22"><path fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" d="M9 4h6a2 2 0 0 1 2 2v13a2 2 0 0 1-2 2H9a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2Zm0 4h6"/></svg>
       </span>
-      <h3>Clipboard, both directions</h3>
-      <p>Copy on the computer, tap to copy on the phone. Paste on the phone, it lands on the computer. A separate note slot never clobbers what you're using.</p>
+      <h3 data-i18n="pillar.clip.title">Clipboard, both directions</h3>
+      <p data-i18n="pillar.clip.body">Copy on the computer, tap to copy on the phone. Paste on the phone, it lands on the computer. A separate note slot never clobbers what you're using.</p>
     </article>
     <article class="pillar">
       <span class="ic ic-green" aria-hidden="true">
         <svg viewBox="0 0 24 24" width="22" height="22"><path fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" d="M5 12a7 7 0 0 1 12-4.9M19 12a7 7 0 0 1-12 4.9M17 3v4h-4M7 21v-4h4"/></svg>
       </span>
-      <h3>Real progress</h3>
-      <p>Byte-weighted percentage for multi-file batches, elapsed time where adb gives no stream progress, a real percentage for phone uploads.</p>
+      <h3 data-i18n="pillar.progress.title">Real progress</h3>
+      <p data-i18n="pillar.progress.body">Byte-weighted percentage for multi-file batches, elapsed time where adb gives no stream progress, a real percentage for phone uploads.</p>
     </article>
   </section>
 
-  <section id="screenshots" class="wrap section">
-    <h2>Two surfaces, one design language</h2>
-    <p class="section-lede">The desktop panel and the phone page share the same colour tokens, radii and type scale — one stylesheet's worth of design decisions, applied to a 380×540 window and a 390×844 screen.</p>
+  <section id="screenshots" class="wrap section reveal">
+    <h2 data-i18n="shots.title">Two surfaces, one design language</h2>
+    <p class="section-lede" data-i18n="shots.lede">The desktop panel and the phone page share the same colour tokens, radii and type scale — one stylesheet's worth of design decisions, applied to a 380×540 window and a 390×844 screen.</p>
 
     <figure class="shots">
       <div class="shot shot-panel">
         <img src="../docs/panel-dark.png" width="380" height="540" alt="The CableDrop desktop panel in dark mode.">
       </div>
-      <figcaption>
+      <figcaption data-i18n-html="shots.panel.caption">
         <strong>Desktop panel</strong> — a menu bar window, 380×540. Dark mode follows the system.
       </figcaption>
     </figure>
@@ -92,90 +99,90 @@
       <div class="shot shot-phone">
         <img src="../docs/phone-light.png" width="390" height="1474" alt="The CableDrop phone page, full page: header with the connected device, a USB trust strip, and cards for content from the computer, the computer clipboard, sending text back, uploading files, and browsing the computer's shared folder.">
       </div>
-      <figcaption>
+      <figcaption data-i18n-html="shots.phone.caption">
         <strong>Phone page</strong> — the whole page at a 390×844 viewport. Any mobile browser, no install.
       </figcaption>
     </figure>
   </section>
 
-  <section id="how" class="wrap section">
-    <h2>How it works</h2>
-    <p class="section-lede">One Go binary. The cable is the whole transport.</p>
+  <section id="how" class="wrap section reveal">
+    <h2 data-i18n="how.title">How it works</h2>
+    <p class="section-lede" data-i18n="how.lede">One Go binary. The cable is the whole transport.</p>
 
-    <div class="flow" role="img" aria-label="The phone's browser reaches the computer over the USB cable: adb reverse maps the phone's localhost:8765 to the computer's 127.0.0.1:8765, where the Go HTTP server serves both the phone page and the desktop panel from the same JSON API.">
+    <div class="flow" role="img" data-i18n-attr="aria-label:how.aria" aria-label="The phone's browser reaches the computer over the USB cable: adb reverse maps the phone's localhost:8765 to the computer's 127.0.0.1:8765, where the Go HTTP server serves both the phone page and the desktop panel from the same JSON API.">
       <div class="node">
         <span class="node-ic" aria-hidden="true">
           <svg viewBox="0 0 24 24" width="22" height="22"><rect x="7" y="2.5" width="10" height="19" rx="2.5" fill="none" stroke="currentColor" stroke-width="1.6"/><path d="M10.5 5.5h3" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg>
         </span>
-        <b>Phone</b>
-        <small>browser or APK</small>
+        <b data-i18n="how.phone">Phone</b>
+        <small data-i18n="how.phoneSub">browser or APK</small>
       </div>
 
       <div class="link">
-        <span class="link-label">adb reverse tcp:8765</span>
+        <span class="link-label" data-i18n="how.linkAdb">adb reverse tcp:8765</span>
         <span class="link-line" aria-hidden="true"></span>
-        <span class="link-label">USB cable</span>
+        <span class="link-label" data-i18n="how.linkUsb">USB cable</span>
       </div>
 
       <div class="node node-strong">
         <span class="node-ic" aria-hidden="true">
           <svg viewBox="0 0 24 24" width="22" height="22"><rect x="2.5" y="4" width="19" height="12.5" rx="2" fill="none" stroke="currentColor" stroke-width="1.6"/><path d="M8.5 20h7" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg>
         </span>
-        <b>Computer</b>
-        <small>127.0.0.1:8765 · Go HTTP</small>
+        <b data-i18n="how.computer">Computer</b>
+        <small data-i18n="how.computerSub">127.0.0.1:8765 · Go HTTP</small>
       </div>
     </div>
 
     <ul class="facts">
-      <li>The computer listens on <code>127.0.0.1</code> only. No firewall prompt, nothing on the LAN.</li>
-      <li>The frontend is plain HTML/CSS/JS embedded with <code>go:embed</code> — no npm, no build step.</li>
-      <li>The clipboard goes through the page, not <code>adb shell</code>: Android 10+ forbids writing the device clipboard over adb, and <code>localhost</code> is a secure context, so the browser Clipboard API works there.</li>
-      <li>Device presence rides a persistent <code>adb track-devices</code> connection — no process forking while idle.</li>
-      <li>Icons are drawn in code by a small in-process rasteriser. There is no binary artwork in the repository.</li>
+      <li data-i18n-html="how.fact1">The computer listens on <code>127.0.0.1</code> only. No firewall prompt, nothing on the LAN.</li>
+      <li data-i18n-html="how.fact2">The frontend is plain HTML/CSS/JS embedded with <code>go:embed</code> — no npm, no build step.</li>
+      <li data-i18n-html="how.fact3">The clipboard goes through the page, not <code>adb shell</code>: Android 10+ forbids writing the device clipboard over adb, and <code>localhost</code> is a secure context, so the browser Clipboard API works there.</li>
+      <li data-i18n-html="how.fact4">Device presence rides a persistent <code>adb track-devices</code> connection — no process forking while idle.</li>
+      <li data-i18n-html="how.fact5">Icons are drawn in code by a small in-process rasteriser. There is no binary artwork in the repository.</li>
     </ul>
   </section>
 
-  <section id="features" class="wrap section">
-    <h2>What's in the box</h2>
+  <section id="features" class="wrap section reveal">
+    <h2 data-i18n="feat.title">What's in the box</h2>
     <div class="grid">
       <article>
-        <h3>Send and receive files</h3>
-        <p>Drop files or whole folders on the panel; pushes land in the phone's Download folder. Pulls land in the shared folder on the computer.</p>
+        <h3 data-i18n="feat.1.title">Send and receive files</h3>
+        <p data-i18n="feat.1.body">Drop files or whole folders on the panel; pushes land in the phone's Download folder. Pulls land in the shared folder on the computer.</p>
       </article>
       <article>
-        <h3>Clipboard bridge</h3>
-        <p>Both directions, including a dedicated note slot so sending text never overwrites the clipboard you're working from.</p>
+        <h3 data-i18n="feat.2.title">Clipboard bridge</h3>
+        <p data-i18n="feat.2.body">Both directions, including a dedicated note slot so sending text never overwrites the clipboard you're working from.</p>
       </article>
       <article>
-        <h3>Phone file browser</h3>
-        <p>The shared folder on the computer is a real file browser on the phone — subfolders, sizes, downloads included.</p>
+        <h3 data-i18n="feat.3.title">Phone file browser</h3>
+        <p data-i18n="feat.3.body">The shared folder on the computer is a real file browser on the phone — subfolders, sizes, downloads included.</p>
       </article>
       <article>
-        <h3>Honest progress</h3>
-        <p>Byte-weighted percentages, elapsed time when adb offers nothing, and failures reported in words rather than error codes.</p>
+        <h3 data-i18n="feat.4.title">Honest progress</h3>
+        <p data-i18n="feat.4.body">Byte-weighted percentages, elapsed time when adb offers nothing, and failures reported in words rather than error codes.</p>
       </article>
       <article>
-        <h3>Real connection states</h3>
-        <p>Not connected, connecting, cable in the wrong USB mode, adb missing, tunnel failed — each says what to do next.</p>
+        <h3 data-i18n="feat.5.title">Real connection states</h3>
+        <p data-i18n="feat.5.body">Not connected, connecting, cable in the wrong USB mode, adb missing, tunnel failed — each says what to do next.</p>
       </article>
       <article>
-        <h3><a href="#apk">Optional Android app</a></h3>
-        <p>A ~845 KB WebView shell for when you want it to feel installed: real file picking, downloads into the Downloads app, a reconnect screen.</p>
+        <h3 data-i18n-html="feat.6.title"><a href="#apk">Optional Android app</a></h3>
+        <p data-i18n="feat.6.body">A ~845 KB WebView shell for when you want it to feel installed: real file picking, downloads into the Downloads app, a reconnect screen.</p>
       </article>
       <article>
-        <h3>Light and dark</h3>
-        <p>Both surfaces follow <code>prefers-color-scheme</code>. It is a media query, not a setting.</p>
+        <h3 data-i18n="feat.7.title">Light and dark</h3>
+        <p data-i18n-html="feat.7.body">Both surfaces follow <code>prefers-color-scheme</code>. It is a media query, not a setting.</p>
       </article>
       <article>
-        <h3>Portable build</h3>
-        <p>macOS, Windows and Linux from one tree. Windows cross-compiles from a Mac; the Linux build needs GTK3 and WebKitGTK 4.1.</p>
+        <h3 data-i18n="feat.8.title">Portable build</h3>
+        <p data-i18n="feat.8.body">macOS, Windows and Linux from one tree. Windows cross-compiles from a Mac; the Linux build needs GTK3 and WebKitGTK 4.1.</p>
       </article>
     </div>
   </section>
 
-  <section id="apk" class="wrap section">
-    <h2>The Android app is optional</h2>
-    <p class="section-lede">Everything above works in the phone's own browser — nothing to install. The APK is a small WebView shell around the very same page, for when you would rather tap an icon than a bookmark. It bundles no server of its own: plug the cable in exactly as before.</p>
+  <section id="apk" class="wrap section reveal">
+    <h2 data-i18n="apk.title">The Android app is optional</h2>
+    <p class="section-lede" data-i18n="apk.lede">Everything above works in the phone's own browser — nothing to install. The APK is a small WebView shell around the very same page, for when you would rather tap an icon than a bookmark. It bundles no server of its own: plug the cable in exactly as before.</p>
 
     <div class="apk">
       <div class="apk-shot">
@@ -184,50 +191,108 @@
       <div class="apk-side">
         <div class="apk-icon">
           <img src="../docs/icon-256.png" width="72" height="72" alt="The CableDrop launcher icon: a blue rounded square with a white mark.">
-          <p><strong>Launcher icon</strong> — the same artwork as everywhere else, drawn in code rather than shipped as bitmaps.</p>
+          <p data-i18n-html="apk.icon"><strong>Launcher icon</strong> — the same artwork as everywhere else, drawn in code rather than shipped as bitmaps.</p>
         </div>
         <ul class="apk-gains">
-          <li><b>File picking that behaves.</b> Uploads use the system picker, and downloads land in the Downloads app with non-ASCII names intact.</li>
-          <li><b>A reconnect screen.</b> Cable out says so plainly instead of showing a WebView error.</li>
-          <li><b>A themed window.</b> The window background and status bar follow the system light/dark setting, so a dark phone never flashes white on cold start.</li>
+          <li data-i18n-html="apk.gain1"><b>File picking that behaves.</b> Uploads use the system picker, and downloads land in the Downloads app with non-ASCII names intact.</li>
+          <li data-i18n-html="apk.gain2"><b>A reconnect screen.</b> Cable out says so plainly instead of showing a WebView error.</li>
+          <li data-i18n-html="apk.gain3"><b>A themed window.</b> The window background and status bar follow the system light/dark setting, so a dark phone never flashes white on cold start.</li>
         </ul>
         <dl class="specs">
-          <dt>Size</dt><dd>~845 KB — the platform WebView and nothing else</dd>
-          <dt>Range</dt><dd>Android 7.0+ (minSdk 24), targetSdk 36</dd>
-          <dt>Permissions</dt><dd><code>INTERNET</code> alone, used only by the loopback tunnel</dd>
-          <dt>Build</dt><dd><code>make apk</code> &rarr; <code>dist/CableDrop.apk</code></dd>
+          <dt data-i18n="apk.specSize.dt">Size</dt><dd data-i18n="apk.specSize.dd">~845 KB — the platform WebView and nothing else</dd>
+          <dt data-i18n="apk.specRange.dt">Range</dt><dd data-i18n="apk.specRange.dd">Android 7.0+ (minSdk 24), targetSdk 36</dd>
+          <dt data-i18n="apk.specPerm.dt">Permissions</dt><dd data-i18n-html="apk.specPerm.dd"><code>INTERNET</code> alone, used only by the loopback tunnel</dd>
+          <dt data-i18n="apk.specBuild.dt">Build</dt><dd data-i18n-html="apk.specBuild.dd"><code>make apk</code> &rarr; <code>dist/CableDrop.apk</code></dd>
         </dl>
       </div>
     </div>
   </section>
 
-  <section class="wrap section">
+  <section class="wrap section reveal">
     <div class="trust">
       <span class="ic ic-green" aria-hidden="true">
         <svg viewBox="0 0 24 24" width="22" height="22"><path fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" d="M12 3 5 6v6c0 4 3 7 7 9 4-2 7-5 7-9V6l-7-3Zm-3 9 2.2 2.2L15.5 10"/></svg>
       </span>
       <div>
-        <h3>Your data doesn't leave the cable</h3>
-        <p>Every byte goes over the USB connection. No account, no server, no telemetry beyond what your package manager already knows. Nothing is installed on the phone — you open a page.</p>
+        <h3 data-i18n="trust.title">Your data doesn't leave the cable</h3>
+        <p data-i18n="trust.body">Every byte goes over the USB connection. No account, no server, no telemetry beyond what your package manager already knows. Nothing is installed on the phone — you open a page.</p>
       </div>
     </div>
   </section>
 
-  <section id="download" class="wrap section">
-    <h2>Get started</h2>
+  <section id="download" class="wrap section reveal">
+    <h2 data-i18n="dl.title">Download</h2>
+    <p class="section-lede" data-i18n="dl.lede">Pick your platform. The desktop builds are ready to run; the Android app is optional.</p>
+
+    <div class="dl-grid">
+      <a class="dl-card" href="https://github.com/volcanicll/cabledrop/releases/latest/download/CableDrop-macos-universal.dmg">
+        <span class="dl-ic" aria-hidden="true">
+          <svg viewBox="0 0 24 24" width="20" height="20"><path fill="currentColor" d="M16.4 12.6c0-2 1.6-3 1.7-3.1-1-1.4-2.4-1.6-2.9-1.6-1.2-.1-2.4.7-3 .7-.6 0-1.6-.7-2.6-.7-1.3 0-2.6.8-3.3 2-1.4 2.4-.4 6 1 8 .7 1 1.5 2.1 2.5 2.1 1 0 1.4-.6 2.6-.6s1.5.6 2.6.6c1.1 0 1.8-1 2.4-2 .8-1.1 1.1-2.2 1.1-2.3 0 0-2.1-.8-2.1-3.1zM14.3 6.3c.5-.7.9-1.6.8-2.5-.8 0-1.7.5-2.3 1.2-.5.6-.9 1.5-.8 2.4.9.1 1.8-.4 2.3-1.1z"/></svg>
+        </span>
+        <span class="dl-name" data-i18n="dl.mac">macOS</span>
+        <span class="dl-note" data-i18n="dl.macNote">Universal (Apple silicon + Intel), .dmg</span>
+        <span class="dl-get" data-i18n="dl.download">Download</span>
+      </a>
+
+      <a class="dl-card" href="https://github.com/volcanicll/cabledrop/releases/latest/download/CableDrop-windows-amd64.zip">
+        <span class="dl-ic" aria-hidden="true">
+          <svg viewBox="0 0 24 24" width="20" height="20"><path fill="currentColor" d="M3 5.6l7.3-1v7.1H3V5.6zm8.4-1.2L21 3v8.7h-9.6V4.4zM3 12.8h7.3v7.1L3 18.9v-6.1zm8.4 0H21V21l-9.6-1.3v-6.9z"/></svg>
+        </span>
+        <span class="dl-name" data-i18n="dl.win">Windows</span>
+        <span class="dl-note" data-i18n="dl.winNote">64-bit (amd64), portable .zip</span>
+        <span class="dl-get" data-i18n="dl.download">Download</span>
+      </a>
+
+      <a class="dl-card" href="https://github.com/volcanicll/cabledrop/releases/latest/download/CableDrop-windows-arm64.zip">
+        <span class="dl-ic" aria-hidden="true">
+          <svg viewBox="0 0 24 24" width="20" height="20"><path fill="currentColor" d="M3 5.6l7.3-1v7.1H3V5.6zm8.4-1.2L21 3v8.7h-9.6V4.4zM3 12.8h7.3v7.1L3 18.9v-6.1zm8.4 0H21V21l-9.6-1.3v-6.9z"/></svg>
+        </span>
+        <span class="dl-name" data-i18n="dl.winArm">Windows ARM</span>
+        <span class="dl-note" data-i18n="dl.winArmNote">ARM64, portable .zip</span>
+        <span class="dl-get" data-i18n="dl.download">Download</span>
+      </a>
+
+      <a class="dl-card" href="https://github.com/volcanicll/cabledrop/releases/latest/download/CableDrop-linux-amd64.tar.gz">
+        <span class="dl-ic" aria-hidden="true">
+          <svg viewBox="0 0 24 24" width="20" height="20"><path fill="currentColor" d="M12 2c-1.9 0-3.2 1.6-3.2 3.6 0 1.3-.4 2.3-1.1 3.4C6.4 10.9 5.4 12.6 5.4 15c0 1.5.5 2.7 1.2 3.6.4.5.3 1 .1 1.5-.1.4-.4.8-.4 1.2 0 .5.4.8 1 .8h9.4c.6 0 1-.3 1-.8 0-.4-.3-.8-.4-1.2-.2-.5-.3-1 .1-1.5.7-.9 1.2-2.1 1.2-3.6 0-2.4-1-4.1-2.3-6-.7-1.1-1.1-2.1-1.1-3.4C15.2 3.6 13.9 2 12 2zm-1.6 4.1c.4 0 .7.4.7.9s-.3.9-.7.9-.7-.4-.7-.9.3-.9.7-.9zm3.2 0c.4 0 .7.4.7.9s-.3.9-.7.9-.7-.4-.7-.9.3-.9.7-.9zM12 8.6c.6 0 1.6.7 1.6 1.2 0 .3-.5.6-1.6.6s-1.6-.3-1.6-.6c0-.5 1-1.2 1.6-1.2z"/></svg>
+        </span>
+        <span class="dl-name" data-i18n="dl.linux">Linux</span>
+        <span class="dl-note" data-i18n="dl.linuxNote">amd64, needs GTK3 and WebKitGTK 4.1</span>
+        <span class="dl-get" data-i18n="dl.download">Download</span>
+      </a>
+
+      <a class="dl-card" href="https://github.com/volcanicll/cabledrop/releases/latest/download/CableDrop.apk">
+        <span class="dl-ic" aria-hidden="true">
+          <svg viewBox="0 0 24 24" width="20" height="20"><path fill="currentColor" d="M6.6 9.5a.9.9 0 0 1 .9.9v5a.9.9 0 0 1-1.8 0v-5a.9.9 0 0 1 .9-.9zm10.8 0a.9.9 0 0 1 .9.9v5a.9.9 0 0 1-1.8 0v-5a.9.9 0 0 1 .9-.9zM8.4 9.3h7.2v7.1a1 1 0 0 1-1 1h-.6v2.1a.9.9 0 0 1-1.8 0v-2.1h-1.4v2.1a.9.9 0 0 1-1.8 0v-2.1h-.6a1 1 0 0 1-1-1V9.3zm.5-4.1 1 1.7a4.4 4.4 0 0 1 4.2 0l1-1.7a.3.3 0 0 1 .5.3l-1 1.7a4.6 4.6 0 0 1 2.6 3.6H6.8a4.6 4.6 0 0 1 2.6-3.6l-1-1.7a.3.3 0 0 1 .5-.3zM9.8 7.6a.5.5 0 1 0 0-1 .5.5 0 0 0 0 1zm4.4 0a.5.5 0 1 0 0-1 .5.5 0 0 0 0 1z"/></svg>
+        </span>
+        <span class="dl-name" data-i18n="dl.apk">Android app (optional)</span>
+        <span class="dl-note" data-i18n="dl.apkNote">Debug-signed, for testing only</span>
+        <span class="dl-get" data-i18n="dl.download">Download</span>
+      </a>
+    </div>
+
+    <p class="dl-links">
+      <a href="https://github.com/volcanicll/cabledrop/releases" data-i18n="dl.allReleases">All releases &amp; checksums</a>
+      <span class="dl-sep" aria-hidden="true">·</span>
+      <a href="https://github.com/volcanicll/cabledrop/releases/latest/download/SHA256SUMS.txt" data-i18n="dl.sums">SHA256 checksums</a>
+    </p>
+  </section>
+
+  <section id="build" class="wrap section reveal">
+    <h2 data-i18n="steps.title">Run it yourself</h2>
     <ol class="steps">
-      <li>
+      <li data-i18n-html="step1">
         <b>Get adb.</b> Install Android Platform Tools (<code>brew install android-platform-tools</code>), or drop the <code>platform-tools</code> folder next to the binary.
       </li>
       <li>
-        <b>Build.</b>
+        <b data-i18n="step2b">Build.</b>
         <pre><code>make app          # CableDrop.app — a menu bar app, no Dock icon
 open CableDrop.app</code></pre>
       </li>
-      <li>
+      <li data-i18n-html="step3">
         <b>Plug in the cable</b> and set the phone's USB mode to <em>File transfer / MTP</em>. "Charging only" is invisible to adb.
       </li>
-      <li>
+      <li data-i18n-html="step4">
         <b>Open the panel</b> from the menu bar, then open <code>http://localhost:8765</code> on the phone. That's the whole phone UI.
       </li>
     </ol>
@@ -240,14 +305,74 @@ open CableDrop.app</code></pre>
 
 <footer class="foot">
   <div class="wrap foot-in">
-    <span>CableDrop · 一根线传文件与文字</span>
+    <span data-i18n="foot.tagline">CableDrop · files and text over one cable</span>
     <span class="foot-links">
       <a href="https://github.com/volcanicll/cabledrop">GitHub</a>
-      <a href="https://github.com/volcanicll/cabledrop/blob/master/LICENSE">MIT</a>
-      <a href="https://github.com/volcanicll/cabledrop/blob/master/README.md">README</a>
+      <a href="https://github.com/volcanicll/cabledrop/blob/master/LICENSE" data-i18n="foot.license">MIT</a>
+      <a href="https://github.com/volcanicll/cabledrop/blob/master/README.md" data-i18n="foot.readme">README</a>
     </span>
   </div>
 </footer>
+
+<script>
+/* Scroll-in transitions. Deliberately tiny and dependency-free: sections fade
+ * and rise once as they enter the viewport, then the observer lets them go.
+ * Without JS (or with reduced motion) everything is simply visible.
+ *
+ * The scroll listener is the safety net for jumps: IntersectionObserver only
+ * reports what is on screen at each frame, so a nav anchor that leaps past
+ * three sections would leave them at opacity 0 until the user scrolled back
+ * through them. The listener reveals anything the viewport has already passed.
+ */
+(function () {
+  var els = [].slice.call(document.querySelectorAll('.reveal'));
+  if (!els.length) return;
+
+  if (!('IntersectionObserver' in window) ||
+      window.matchMedia('(prefers-reduced-motion: reduce)').matches) {
+    els.forEach(function (el) { el.classList.add('in'); });
+    return;
+  }
+
+  function show(el) {
+    if (el.classList.contains('in')) return;
+    el.classList.add('in');
+    io.unobserve(el);
+  }
+
+  var io = new IntersectionObserver(function (entries) {
+    entries.forEach(function (e) { if (e.isIntersecting) show(e.target); });
+  }, { rootMargin: '0px 0px -8% 0px', threshold: 0.06 });
+  els.forEach(function (el) { io.observe(el); });
+
+  // Everything already at or above the viewport's lower edge should be visible:
+  // either it is on screen now, or a jump skipped past it. Cheap enough to run
+  // over the whole list, and it cannot get out of step with the observer.
+  function sweep() {
+    var limit = window.innerHeight * 0.92;
+    els.forEach(function (el) {
+      if (!el.classList.contains('in') && el.getBoundingClientRect().top < limit) show(el);
+    });
+  }
+
+  var queued = false;
+  function onScroll() {
+    if (queued) return;
+    queued = true;
+    window.requestAnimationFrame(function () { queued = false; sweep(); });
+  }
+
+  window.addEventListener('scroll', onScroll, { passive: true });
+  window.addEventListener('resize', onScroll, { passive: true });
+  window.addEventListener('hashchange', onScroll, { passive: true });
+  // The initial `#anchor` jump happens as part of loading, after this script
+  // has run but with no scroll event we are attached for, so sweep again once
+  // the document is fully loaded and once more after the jump has settled.
+  window.addEventListener('load', onScroll, { passive: true });
+  sweep();
+  window.setTimeout(onScroll, 350);
+})();
+</script>
 
 </body>
 </html>

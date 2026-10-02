@@ -561,6 +561,177 @@ code {
 }
 
 @media (prefers-reduced-motion: reduce) {
-  * { transition: none !important; }
+  * { transition: none !important; animation: none !important; }
   .btn:hover { transform: none; }
+  .reveal { opacity: 1; transform: none; }
+}
+
+/* ---------- language switch ---------- */
+
+.lang-switch {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  padding: 2px;
+  border: 1px solid var(--line-strong);
+  border-radius: var(--r-full);
+  background: var(--surface-2);
+}
+
+.lang-switch button {
+  appearance: none;
+  border: 0;
+  background: none;
+  font: inherit;
+  font-size: 12.5px;
+  font-weight: 600;
+  line-height: 1;
+  color: var(--text-2);
+  padding: 6px 10px;
+  border-radius: var(--r-full);
+  cursor: pointer;
+  transition: background var(--t-med) var(--ease), color var(--t-med) var(--ease);
+}
+
+.lang-switch button:hover { color: var(--text); }
+
+.lang-switch button[aria-pressed="true"] {
+  background: var(--accent);
+  color: #fff;
+}
+
+/* A brief dim while the copy swaps, so the change reads as a change rather
+ * than a flicker. Applied for a couple of frames by i18n.js. */
+.lang-switching body { opacity: 0.55; }
+body { transition: opacity 140ms var(--ease); }
+
+/* ---------- scroll-in transitions ---------- */
+
+/* Only armed when JS is present (.js on <html>): with no JS every section
+ * stays visible instead of being stuck at opacity 0. */
+.js .reveal {
+  opacity: 0;
+  transform: translateY(14px);
+  transition: opacity 620ms var(--ease), transform 620ms var(--ease);
+}
+
+.js .reveal.in { opacity: 1; transform: none; }
+
+/* Stagger the children of a section so a grid arrives as a group, not a slab. */
+.js .reveal.in .pillar,
+.js .reveal.in .grid article,
+.js .reveal.in .dl-card {
+  animation: rise 620ms var(--ease) both;
+}
+
+.js .reveal.in .pillar:nth-child(2),
+.js .reveal.in .grid article:nth-child(2),
+.js .reveal.in .dl-card:nth-child(2) { animation-delay: 70ms; }
+
+.js .reveal.in .pillar:nth-child(3),
+.js .reveal.in .grid article:nth-child(3),
+.js .reveal.in .dl-card:nth-child(3) { animation-delay: 140ms; }
+
+.js .reveal.in .grid article:nth-child(4),
+.js .reveal.in .dl-card:nth-child(4) { animation-delay: 210ms; }
+
+.js .reveal.in .grid article:nth-child(n+5),
+.js .reveal.in .dl-card:nth-child(n+5) { animation-delay: 260ms; }
+
+@keyframes rise {
+  from { opacity: 0; transform: translateY(10px); }
+  to   { opacity: 1; transform: none; }
+}
+
+/* ---------- download cards ---------- */
+
+.dl-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(230px, 1fr));
+  gap: 14px;
+  margin-bottom: 18px;
+}
+
+.dl-card {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  grid-template-areas:
+    "ic name"
+    "ic note"
+    "get get";
+  align-items: center;
+  column-gap: 14px;
+  row-gap: 2px;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: var(--r-lg);
+  padding: 18px;
+  box-shadow: var(--shadow-card);
+  color: var(--text);
+  transition: transform var(--t-med) var(--ease), border-color var(--t-med) var(--ease),
+              box-shadow var(--t-med) var(--ease);
+}
+
+.dl-card:hover {
+  text-decoration: none;
+  transform: translateY(-2px);
+  border-color: var(--accent);
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.06), 0 12px 28px rgba(0, 0, 0, 0.08);
+}
+
+.dl-ic {
+  grid-area: ic;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 40px;
+  height: 40px;
+  border-radius: var(--r-md);
+  background: var(--accent-soft);
+  color: var(--accent-text);
+  flex: none;
+}
+
+.dl-name { grid-area: name; font-weight: 620; font-size: 15.5px; letter-spacing: -0.01em; }
+.dl-note { grid-area: note; font-size: 13px; color: var(--text-3); }
+
+.dl-get {
+  grid-area: get;
+  margin-top: 12px;
+  font-size: 13.5px;
+  font-weight: 600;
+  color: var(--accent-text);
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.dl-get::after {
+  content: "";
+  width: 13px;
+  height: 13px;
+  background: currentColor;
+  -webkit-mask: no-repeat center / contain
+    url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Cpath fill='none' stroke='%23000' stroke-width='1.8' stroke-linecap='round' stroke-linejoin='round' d='M8 2v8m0 0 3-3m-3 3-3-3M3 13h10'/%3E%3C/svg%3E");
+  mask: no-repeat center / contain
+    url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Cpath fill='none' stroke='%23000' stroke-width='1.8' stroke-linecap='round' stroke-linejoin='round' d='M8 2v8m0 0 3-3m-3 3-3-3M3 13h10'/%3E%3C/svg%3E");
+  transition: transform var(--t-med) var(--ease);
+}
+
+.dl-card:hover .dl-get::after { transform: translateY(2px); }
+
+.dl-links {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  align-items: center;
+  font-size: 14px;
+  margin: 0 0 8px;
+}
+
+.dl-sep { color: var(--text-3); }
+
+@media (max-width: 880px) {
+  .lang-switch { margin-left: auto; }
+  .bar-nav { gap: 12px; }
 }
