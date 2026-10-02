@@ -33,9 +33,14 @@ ifeq ($(shell uname -s),Linux)
   TAGS += gtk3
 endif
 
-.PHONY: all build run app windows linux icons icons-android apk dist release test vet fmt clean
+.PHONY: all version build run app app-universal dmg windows linux icons icons-android apk dist release test vet fmt clean
 
 all: build
+
+## The version string this checkout would stamp. CI reads it to name artifacts
+## the same way a local build does.
+version:
+	@echo $(VERSION)
 
 ## Native binary for this machine.
 build:
@@ -53,6 +58,43 @@ app: build icons
 	@sed 's/@VERSION@/$(VERSION)/' build/darwin/Info.plist > $(APPNAME).app/Contents/Info.plist
 	@codesign --force --deep --sign - $(APPNAME).app >/dev/null 2>&1 || true
 	@echo "  $(APPNAME).app"
+
+## macOS bundle for both architectures, lipo'd into one universal app.
+##
+## The Wails macOS backend is cgo, so each slice is a real native compile with
+## clang told which architecture to target — setting GOARCH alone gets you a
+## linker error, not a fat binary.
+DARWIN_MIN = -mmacosx-version-min=12.0
+app-universal: icons
+	@rm -rf $(APPNAME).app build/darwin/arch
+	@mkdir -p $(APPNAME).app/Contents/MacOS $(APPNAME).app/Contents/Resources build/darwin/arch
+	@for arch in amd64 arm64; do \
+		case $$arch in amd64) clang_arch=x86_64 ;; *) clang_arch=$$arch ;; esac; \
+		echo "  darwin/$$arch"; \
+		CGO_ENABLED=1 GOARCH=$$arch \
+		CGO_CFLAGS="$(DARWIN_MIN) -arch $$clang_arch" \
+		CGO_LDFLAGS="$(DARWIN_MIN) -arch $$clang_arch" \
+		go build $(VCS) -tags "$(TAGS)" -trimpath -ldflags="$(LDFLAGS)" \
+			-o build/darwin/arch/$(BINARY)-$$arch . || exit 1; \
+	done
+	@lipo -create -output $(APPNAME).app/Contents/MacOS/$(BINARY) \
+		build/darwin/arch/$(BINARY)-amd64 build/darwin/arch/$(BINARY)-arm64
+	@cp build/darwin/AppIcon.icns $(APPNAME).app/Contents/Resources/AppIcon.icns
+	@sed 's/@VERSION@/$(VERSION)/' build/darwin/Info.plist > $(APPNAME).app/Contents/Info.plist
+	@codesign --force --deep --sign - $(APPNAME).app >/dev/null 2>&1 || true
+	@echo "  $(APPNAME).app (universal: $$(lipo -archs $(APPNAME).app/Contents/MacOS/$(BINARY)))"
+
+## macOS disk image, with the usual drag-to-Applications shortcut.
+dmg: app-universal
+	@mkdir -p dist
+	@rm -rf build/darwin/dmg
+	@mkdir -p build/darwin/dmg
+	@cp -R $(APPNAME).app build/darwin/dmg/
+	@ln -s /Applications build/darwin/dmg/Applications
+	@hdiutil create -quiet -volname "$(APPNAME)" -srcfolder build/darwin/dmg \
+		-ov -format UDZO "dist/$(APPNAME)-$(VERSION).dmg"
+	@rm -rf build/darwin/dmg
+	@echo "  dist/$(APPNAME)-$(VERSION).dmg"
 
 ## Windows executables, cross-compiled. No cgo, so this works from macOS.
 windows: icons
