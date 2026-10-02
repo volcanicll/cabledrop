@@ -13,6 +13,7 @@ import android.view.Gravity;
 import android.view.View;
 import android.view.ViewGroup;
 import android.webkit.ValueCallback;
+import android.webkit.JavascriptInterface;
 import android.webkit.WebChromeClient;
 import android.webkit.WebResourceError;
 import android.webkit.WebResourceRequest;
@@ -25,6 +26,17 @@ import android.widget.FrameLayout;
 import android.widget.LinearLayout;
 import android.widget.TextView;
 import android.widget.Toast;
+
+import java.io.BufferedInputStream;
+import java.io.File;
+import java.io.FileOutputStream;
+import java.io.IOException;
+import java.io.InputStream;
+import java.net.HttpURLConnection;
+import java.net.URL;
+import java.text.SimpleDateFormat;
+import java.util.Date;
+import java.util.Locale;
 
 /**
  * A thin shell around the same page the phone's browser gets at
@@ -96,6 +108,13 @@ public class MainActivity extends Activity {
         // Match the page canvas so the frame between cold start and first
         // paint (and any gap under short content) is not a white flash.
         web.setBackgroundColor(resolveWindowBg());
+
+        // The page's share button asks the shell to open the system share
+        // sheet: Web Share with files is Chrome 76+, and the WebView this
+        // phone ships is pinned at 75 (see NativeBridge). The interface is
+        // safe to expose because the WebView only ever loads our own loopback
+        // page — shouldOverrideUrlLoading hands anything else to the browser.
+        web.addJavascriptInterface(new NativeBridge(), "CableDropNative");
 
         web.setWebViewClient(new WebViewClient() {
             @Override
@@ -189,6 +208,120 @@ public class MainActivity extends Activity {
 
     private void loadPage() {
         web.loadUrl("http://127.0.0.1:" + prefs.getInt(PREF_PORT, DEFAULT_PORT) + "/");
+    }
+
+    /** Exposed to the page as window.CableDropNative: the things a web page
+     *  cannot do by itself but the APK shell can. Right now that is one thing
+     *  — opening the system share sheet for the clipboard image. A browser
+     *  would use Web Share for that, but sharing a *file* is Web Share Level
+     *  2 (Chrome 76+), and the WebView this project's reference phone is
+     *  pinned at is Chrome 75, so inside the APK the page has no API left and
+     *  this bridge is the only road. */
+    private class NativeBridge {
+
+        /** Called from the page's share button, on the JS bridge thread.
+         *  The image never crosses JNI as a base64 string: native fetches it
+         *  itself from the same loopback server the page reads, stages it in
+         *  the cache, then opens the chooser on the main thread. */
+        @JavascriptInterface
+        public void shareClipImage() {
+            new Thread(() -> {
+                String name = null;
+                Exception fail = null;
+                try {
+                    name = stageClipImage();
+                } catch (Exception e) {
+                    fail = e;
+                }
+                onStaged(name, fail);
+            }, "cabledrop-share").start();
+        }
+
+        /** The landing after the fetch: an error toast or the share sheet,
+         *  either way back on the main thread. */
+        private void onStaged(final String name, final Exception fail) {
+            runOnUiThread(() -> {
+                if (isFinishing() || isDestroyed()) return;
+                if (fail != null) {
+                    Toast.makeText(MainActivity.this, fail.getMessage(), Toast.LENGTH_LONG).show();
+                    return;
+                }
+                shareStaged(name);
+            });
+        }
+
+        /** Fetches /api/clip/image and writes the PNG to cacheDir/share,
+         *  returning its file name. Every failure throws with a message
+         *  written for a toast, so a dead end is always named: a silent
+         *  nothing after a tap reads as "the bridge is broken". */
+        private String stageClipImage() throws Exception {
+            int port = prefs.getInt(PREF_PORT, DEFAULT_PORT);
+            HttpURLConnection conn = (HttpURLConnection)
+                    new URL("http://127.0.0.1:" + port + "/api/clip/image").openConnection();
+            conn.setConnectTimeout(4000);
+            conn.setReadTimeout(8000);
+            int code = conn.getResponseCode();
+            if (code == 404) {
+                throw new IOException("电脑剪贴板里现在没有图片");
+            }
+            if (code != 200) {
+                throw new IOException("取图失败（HTTP " + code + "），请重试");
+            }
+            String name = "cabledrop-" +
+                    new SimpleDateFormat("yyyyMMdd-HHmmss", Locale.US).format(new Date()) + ".png";
+            File dir = new File(getCacheDir(), "share");
+            if (!dir.isDirectory() && !dir.mkdirs()) {
+                throw new IOException("无法写入应用缓存，分享中止");
+            }
+            // A staged file must outlive the share sheet — the receiving app
+            // reads it whenever the user finishes tapping — but a day-old one
+            // is surely done sharing and is only costing cache space.
+            long stale = System.currentTimeMillis() - 24 * 60 * 60 * 1000L;
+            File[] old = dir.listFiles();
+            if (old != null) {
+                for (File f : old) {
+                    if (f.lastModified() < stale) f.delete();
+                }
+            }
+            File out = new File(dir, name);
+            InputStream in = new BufferedInputStream(conn.getInputStream());
+            FileOutputStream fout = new FileOutputStream(out);
+            try {
+                byte[] buf = new byte[16 * 1024];
+                for (int n; (n = in.read(buf)) != -1; ) {
+                    fout.write(buf, 0, n);
+                }
+            } finally {
+                try { fout.close(); } catch (IOException ignored) { }
+                try { in.close(); } catch (IOException ignored) { }
+            }
+            return name;
+        }
+
+        /** Opens the system share sheet over the staged file. Which apps
+         *  appear — WeChat, QQ, whatever else — is the sheet's own business:
+         *  anything declaring a SEND handler for images lands there. */
+        private void shareStaged(String name) {
+            Uri uri = new Uri.Builder()
+                    .scheme("content")
+                    .authority(ShareProvider.AUTHORITY)
+                    .appendPath(name)
+                    .build();
+            Intent send = new Intent(Intent.ACTION_SEND);
+            send.setType("image/png");
+            send.putExtra(Intent.EXTRA_STREAM, uri);
+            // The flag on the inner intent is what grants the receiver read
+            // access. The chooser gets it too: on some OS levels it forwards
+            // the stream without the grant unless its own intent carries it.
+            send.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION);
+            Intent chooser = Intent.createChooser(send, "分享图片");
+            chooser.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION);
+            try {
+                startActivity(chooser);
+            } catch (Exception e) {
+                Toast.makeText(MainActivity.this, "没有可用的分享方式", Toast.LENGTH_LONG).show();
+            }
+        }
     }
 
     /** Shown when the page cannot be reached: the cable is out or the desktop

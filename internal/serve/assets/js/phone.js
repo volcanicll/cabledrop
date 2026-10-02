@@ -285,17 +285,22 @@ $('upload').onclick = () => {
   xhr.send(fd);
 };
 
-/* ---------------- copy the clipboard image ---------------- */
+/* ---------------- copy / share the clipboard image ---------------- */
 
 // Writing an image needs the ClipboardItem form of the API, which is both
 // newer and pickier than writeText: the WebView some ROMs ship (this project's
-// reference phone serves pages from Chrome 75) has neither. Every failure must
-// name itself — a silent dead button reads as "the bridge is broken" — and the
-// save button below stays as the path that works everywhere.
+// reference phone serves pages from Chrome 75) has neither. Where it is
+// missing the button removes itself rather than sit there collecting
+// apologies — every tap it could ever take ends in the same failure toast.
+// The guard inside the handler stays for engines the probe judges wrong.
+if (!navigator.clipboard || !window.ClipboardItem) {
+  $('copyImage').style.display = 'none';
+}
+
 $('copyImage').onclick = async () => {
   if (!imageBlob) { toast('没有可复制的图片'); return; }
   if (!navigator.clipboard || !window.ClipboardItem) {
-    toast('这台手机的浏览器不支持复制图片，请用下面的「保存到手机」');
+    toast('这台手机的浏览器不支持复制图片，请用「分享图片」或「保存到手机」');
     return;
   }
   try {
@@ -304,8 +309,47 @@ $('copyImage').onclick = async () => {
   } catch (e) {
     const why = (e && e.name === 'NotAllowedError') ? '没有获得剪贴板权限'
       : (e && e.message) || '未知原因';
-    toast('复制图片失败（' + why + '），请用「保存到手机」');
+    toast('复制图片失败（' + why + '），请用「分享图片」或「保存到手机」');
   }
+};
+
+// Receiving apps show this name while the share travels, same shape as the
+// downloads the server names for the save button.
+function imageFileName() {
+  const d = new Date(), p = (n) => String(n).padStart(2, '0');
+  return 'cabledrop-' + d.getFullYear() + p(d.getMonth() + 1) + p(d.getDate()) +
+    '-' + p(d.getHours()) + p(d.getMinutes()) + p(d.getSeconds()) + '.png';
+}
+
+// Sharing a picture has three rungs, walked in order of capability:
+//
+//   1. Web Share with files — the clean path, no native code — but it is
+//      Level 2 of the API, Chrome 76+, so the APK's pinned Chrome 75 WebView
+//      fails the canShare probe.
+//   2. The APK shell's native bridge: the shell fetches the image itself and
+//      opens the system share sheet, WeChat and QQ included.
+//   3. A named escape hatch. Whatever happens, the tap ends in something
+//      readable — a silent no-op reads as "the bridge is broken".
+$('shareImage').onclick = async () => {
+  if (!imageBlob) { toast('没有可分享的图片'); return; }
+  const file = new File([imageBlob], imageFileName(), { type: 'image/png' });
+  if (navigator.share && navigator.canShare && navigator.canShare({ files: [file] })) {
+    try {
+      await navigator.share({ files: [file], title: 'CableDrop 图片' });
+    } catch (e) {
+      // The user dismissing the sheet is not a failure worth an alert.
+      if (e && e.name !== 'AbortError') {
+        toast('分享失败：' + ((e && e.message) || '未知原因'));
+      }
+    }
+    return;
+  }
+  if (window.CableDropNative && CableDropNative.shareClipImage) {
+    toast('正在准备分享…');
+    CableDropNative.shareClipImage(); // the sheet, or an error toast, comes from native
+    return;
+  }
+  toast('这台手机的网页引擎不支持直接分享，请用「保存到手机」后从相册分享');
 };
 
 // The download fallback: the endpoint marks the body as an attachment, which

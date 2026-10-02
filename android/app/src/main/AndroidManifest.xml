@@ -23,5 +23,14 @@
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
         </activity>
+
+        <!-- Serves the clipboard image staged for sharing as a content:// URI
+             for ACTION_SEND. Not exported: receiving apps are granted one-shot
+             read access by the share intent's flag, everyone else is refused. -->
+        <provider
+            android:name=".ShareProvider"
+            android:authorities="io.github.volcanicll.cabledrop.share"
+            android:exported="false"
+            android:grantUriPermissions="true" />
     </application>
 </manifest>
