@@ -22,7 +22,7 @@
 
 | | |
 |---|---|
-| <img src="docs/panel-dark.png" width="330" alt="CableDrop 电脑端面板"> | <img src="docs/phone-light.png" width="250" alt="CableDrop 手机端网页（整页）"> |
+| <img src="docs/zh/panel-light.png" width="330" alt="CableDrop 电脑端面板"> | <img src="docs/zh/phone-light.png" width="250" alt="CableDrop 手机端网页（整页）"> |
 | **电脑端面板** —— macOS 菜单栏,380×540 | **手机端网页** —— 整页效果,任意手机浏览器打开 |
 
 - **文件双向**。拖文件到面板或点选发送;在手机上直接浏览电脑的共享目录(含子文件夹)并下载。手机里的文件也能一键取回到电脑。

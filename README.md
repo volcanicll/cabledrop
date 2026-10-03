@@ -168,10 +168,26 @@ releases those scrollers at capture time and then shoots past the viewport, so
 each image is the whole page at a viewport the layout was actually designed for
 (the panel's real 380×540 window; a 390×844 phone).
 
+Every page is shot in both languages. The script forces the locale through the
+DevTools override rather than letting the host machine decide, so a run on a
+Chinese Mac and a run on an English one produce the same files — the host
+machine's locale used to leak straight into the English README. English keeps
+the plain names (`docs/panel-light.png`); the other languages sit in a
+subdirectory (`docs/zh/panel-light.png`). `apk-light.png` is the one exception:
+it is a real device capture (`adb shell screencap`, status bar cropped, scaled
+to 780 wide), taken by hand against the demo fixture rather than the live
+server, so it does not list anyone's real files.
+
 ```bash
 CABLEDROP_SHOTS=1 go test -run TestScreenshotServer -timeout 1h ./internal/serve/ &
 python3 scripts/shots.py          # needs Chrome; writes docs/{panel,phone}-{light,dark}.png
+                                  # and docs/zh/{panel,phone}-{light,dark}.png
 ```
+
+The landing page swaps its screenshots with the language, and
+`internal/serve/site_test.go` holds that together: every `shot.*.src` key needs
+a counterpart in the other language pointing at a file that exists, and each
+`<img>`'s declared box has to match the real image's aspect ratio.
 
 ## Status & compatibility
 
