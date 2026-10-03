@@ -118,8 +118,13 @@ linux:
 		-o dist/$(BINARY)-linux-$(shell go env GOARCH) .
 
 ## Every icon a release needs, drawn by the app itself.
+##
+## Through cmd/genicons, not `go run .`: the main package pulls in the Wails
+## UI, which is cgo against the platform's webview toolkit, and the Android
+## job has no GTK — it would fail to compile before drawing anything. The
+## rasteriser itself needs nothing but the Go toolchain.
 icons:
-	@go run . --gen-icons build/icons
+	@go run ./cmd/genicons build/icons
 	@mkdir -p build/windows
 	@cp build/icons/app-*.png build/windows/
 	@rm -rf build/darwin/cabledrop.iconset
@@ -133,7 +138,7 @@ icons:
 
 ## Android launcher icons, same artwork at every density.
 icons-android:
-	@go run . --gen-android-icons android/app/src/main/res
+	@go run ./cmd/genicons --android android/app/src/main/res
 
 ## Android APK: a WebView shell that opens the same page the phone browser
 ## gets over `adb reverse`. Needs the Android SDK (compileSdk 36 is what the

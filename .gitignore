@@ -8,3 +8,4 @@
 /build/darwin/dmg/
 rsrc_windows_*.syso
 .DS_Store
+/genicons
