@@ -105,6 +105,12 @@ func newImageTestClipboard() (*Clipboard, *[]byte) {
 		}
 		return png, nil
 	}
+	// The write side needs faking too: Set() shells out to the platform
+	// clipboard command, and the read fakes above do not cover it. On a machine
+	// with no pasteboard tool at all — a bare CI runner — the real write fails
+	// with "executable file not found", which reads as a product bug rather
+	// than the missing stub it is.
+	c.write = func(string) error { return nil }
 	c.interval = func() time.Duration { return time.Hour }
 	return c, &png
 }
