@@ -28,10 +28,21 @@ First release.
 - Icons drawn in code by a small in-process rasteriser; no binary artwork in
   the repository
 
-## Unreleased
+## 0.0.2 - 2026-10-03
 
 ### Changed
 
+- The phone page and the desktop panel are bilingual: every user-facing
+  string now lives in one keyed table (`assets/js/i18n.js`) and the surfaces
+  render English or Simplified Chinese, following the system locale with a
+  visible toggle that remembers the choice. Nothing compiles the table, so
+  `internal/serve/i18n_test.go` guards the failure modes this feature ships
+  with — a key missing from one language (the UI would print the raw key), a
+  dictionary entry no page uses, and hard-coded text creeping back into the
+  served HTML
+- The landing page is bilingual on the same terms (system default, `中/EN`
+  toggle, choice persisted) and now links to real downloads instead of
+  telling you to run `make app`
 - Panel UI polish pass: the phone's real model name is the header headline
   (asked from the device over `getprop` when adb's listing has none), the
   connection line spells out "USB 已连接 · 77 GB 可用", and a small
@@ -69,6 +80,15 @@ First release.
 
 ### Added
 
+- Send the clipboard image into another app: a 分享图片 / Share image button
+  opens the system share sheet (WeChat, QQ, whatever else declares an image
+  handler). Sharing a *file* is Web Share Level 2 — Chrome 76+ — and the
+  APK's WebView is pinned at 75, so the button walks three rungs: Web Share
+  where the engine has it, the APK shell's native bridge where it does not
+  (it fetches the image from the same loopback server, stages it in the app
+  cache and opens `ACTION_SEND` through a read-only `ContentProvider` of our
+  own, because a `file://` URI in `EXTRA_STREAM` throws on targetSdk 24+),
+  and a named escape hatch if neither is available
 - `site/` — a dependency-free product landing page (one HTML file, one
   stylesheet, inline SVG icons, no framework and no build step) that reuses
   the app's own colour tokens so the page and the product look like the same
