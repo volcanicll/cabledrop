@@ -21,6 +21,10 @@ a viewport the layout was actually designed for.
 
 Needs Chrome and nothing else: the DevTools Protocol client below is stdlib.
 
+Each page is shot in both languages. The language is forced through the
+DevTools locale override rather than left to the machine's — a run on a
+Chinese Mac and a run on an English one have to produce the same files.
+
 Run the demo server first:
     CABLEDROP_SHOTS=1 go test -run TestScreenshotServer -timeout 1h ./internal/serve/
 """
@@ -73,6 +77,21 @@ PAGES = {
     "panel": ("/panel", 500, 740, False),
     "phone": ("/", 390, 844, True),
 }
+
+# The pages ship bilingual, so the screenshots have to as well — a page that
+# switches language under a screenshot frozen in the other one is a lie. The
+# locale comes from the DevTools override below, not from the host machine:
+# this Mac is zh_CN, and a run here used to bake Chinese into the English
+# README. English keeps the docs/*.png names (README.md, the landing page and
+# older links all point at them); the other languages live in a subdirectory.
+LANGS = {
+    "en": ("en-US", ""),
+    "zh": ("zh-CN", "zh/"),
+}
+
+# Both pages remember an explicit language choice under this key (see
+# site/i18n.js and internal/serve/assets/js/i18n.js — same key, same meaning).
+STORE_KEY = "cabledrop.lang"
 
 # Release the page's own scroll plumbing so the document can grow to the real
 # content height.
@@ -264,12 +283,36 @@ def start_chrome(port: int) -> subprocess.Popen:
 
 
 def capture(cdp: CDP, url: str, w: int, h: int, out: pathlib.Path, dark: bool,
-            taller: bool) -> None:
+            taller: bool, locale: str, storage_key: str) -> None:
+    # Force the locale before navigating. The override only takes effect on the
+    # next document, which is why it is set here and not after the navigate;
+    # and it changes navigator.languages without touching navigator.language,
+    # which is why the page's own storage key is primed as well.
+    cdp("Emulation.setLocaleOverride", locale=locale)
+    # The locale override does not reach Accept-Language on the page's own
+    # fetches — it re-renders the UI in the right language while the API data
+    # stays whatever the server's default is. Setting the header explicitly is
+    # what makes the demo fixture answer in the language the shot is taken in.
+    cdp("Network.setExtraHTTPHeaders",
+        headers={"Accept-Language": f"{locale},en;q=0.5"})
+    # Belt and braces: the header is what the fixture reads, but it is also the
+    # part that silently stops arriving across CDP versions, so a cookie says
+    # the same thing a second way.
+    cdp("Network.setCookie", name="cabledrop.demo.lang", value=locale[:2],
+        domain="127.0.0.1", path="/")
     cdp("Emulation.setDeviceMetricsOverride",
         width=w, height=h, deviceScaleFactor=SCALE, mobile=w < 500)
     cdp("Emulation.setEmulatedMedia", media="",
         features=[{"name": "prefers-color-scheme",
                    "value": "dark" if dark else "light"}])
+    # Pin the language the way a returning visitor would have it. The override
+    # alone is not enough for a page that also reads navigator.language, and a
+    # screenshot that silently came back in the wrong language is the failure
+    # this whole function exists to avoid.
+    cdp("Page.navigate", url=url)
+    time.sleep(0.4)
+    cdp.js(f"try {{ localStorage.setItem({storage_key!r}, {locale[:2]!r}) }} "
+           f"catch (e) {{}}")
     cdp("Page.navigate", url=url)
     time.sleep(2.5)                                    # load + first API poll
     cdp("Runtime.evaluate", expression="new Promise(r => setTimeout(r, 1200))",
@@ -283,6 +326,7 @@ def capture(cdp: CDP, url: str, w: int, h: int, out: pathlib.Path, dark: bool,
     time.sleep(0.5)
     where = json.loads(cdp.js(
         "JSON.stringify({href: location.href, title: document.title,"
+        " lang: document.documentElement.lang,"
         " cards: document.querySelectorAll('.p-card').length,"
         " scrolls: [...document.querySelectorAll('*')]"
         ".filter(e => ['auto','scroll'].includes(getComputedStyle(e).overflowY)).length})"))
@@ -290,6 +334,11 @@ def capture(cdp: CDP, url: str, w: int, h: int, out: pathlib.Path, dark: bool,
         raise RuntimeError(
             f"the page never loaded: landed on {where['href']} ({where['title']}). "
             f"Is the demo server up on {BASE}?")
+    if not where["lang"].lower().startswith(locale[:2]):
+        raise RuntimeError(
+            f"asked for {locale} but the page rendered in {where['lang']!r} — "
+            f"the language override did not take, so {out.name} would be a "
+            f"screenshot in the wrong language")
     cw, ch = json.loads(cdp.js(MEASURE))
     if taller and ch <= h:
         raise RuntimeError(
@@ -314,10 +363,24 @@ def main() -> int:
         ws = WS(page["webSocketDebuggerUrl"])
         cdp = CDP(ws)
         cdp("Page.enable")
-        for name, (path, w, h, taller) in PAGES.items():
-            for theme, dark in (("light", False), ("dark", True)):
-                capture(cdp, BASE + path, w, h, OUT / f"{name}-{theme}.png", dark,
-                        taller)
+        # Network.enable is not optional: setExtraHTTPHeaders is silently
+        # dropped without it, and the symptom is a screenshot whose UI is in one
+        # language and whose data is in the other.
+        cdp("Network.enable")
+        for lang, (locale, sub) in LANGS.items():
+            # English writes docs/*.png; every other language writes
+            # docs/<lang>/*.png, so the files the READMEs already point at keep
+            # their names.
+            out_dir = OUT / sub if sub else OUT
+            out_dir.mkdir(parents=True, exist_ok=True)
+            for name, (path, w, h, taller) in PAGES.items():
+                for theme, dark in (("light", False), ("dark", True)):
+                    # The fixture's sample data follows the same Accept-Language
+                    # the locale override forces, so an English page never comes
+                    # back listing 屏幕录像-最终版.mov. No query string needed.
+                    capture(cdp, BASE + path, w, h,
+                            out_dir / f"{name}-{theme}.png",
+                            dark, taller, locale, STORE_KEY)
         ws.close()
     finally:
         proc.terminate()
