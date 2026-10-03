@@ -13,21 +13,31 @@ site/
 └── README.md     本文件
 ```
 
-**没有 JS，没有构建步骤，没有任何外部依赖** —— 没有框架、没有 CDN、没有外部字体、
+**没有构建步骤，没有任何外部依赖** —— 没有框架、没有 CDN、没有外部字体、
 没有图标库。图标是内联 SVG。图片直接引用仓库里的 `../docs/*.png`。
+唯一的 JS 是 `i18n.js`（中英字典 + 切换），不联网、无依赖。
 
-`index.html` 引用的图（都在 `docs/`，除 icon 外都是生成物）：
+`index.html` 引用的图（都在 `docs/`，除 icon 外都是生成物）。
+**中英各一套**：切语言时 `src` 也跟着换，否则会出现「英文文案配中文截图」。
+英文用 `docs/` 下的原名（主 README 和旧链接都指向它们），中文在 `docs/zh/`：
 
 | 文件 | 用途 |
 |---|---|
-| `icon-256.png` | favicon、页头 logo、Android 应用段的启动图标 |
+| `icon-256.png` | favicon、页头 logo、Android 应用段的启动图标（不分语言） |
 | `panel-light.png` / `panel-dark.png` | 桌面面板，浅色 / 深色 |
 | `phone-light.png` | 手机网页整页 |
 | `apk-light.png` | 安装版 APK 在真机上运行（已裁掉状态栏） |
 
+路径写在 `i18n.js` 的字典里（`shot.*.src` / `shot.*.alt`），由 `data-i18n-attr`
+驱动——和文案走同一套机制，所以加语言只改字典。`internal/serve/site_test.go`
+守着它：任一语言的 `shot.*.src` 缺了、指向不存在的文件、或者两语言指向同一张图，
+CI 都会红。
+
 `apk-light.png` 是**真机截图**，不是渲染图：`adb shell screencap` 拿 1080×2340，
-再用 `/tmp` 里的 Go 裁图工具切掉状态栏、缩到 780 宽。它跟 `phone-light.png` 内容几乎
+再用 `magick` 切掉状态栏、缩到 780 宽。它跟 `phone-light.png` 内容几乎
 一样 —— 这是事实，APK 就是同一个页面套了个 WebView 壳，页面里不要把它写成两种界面。
+拍的时候让 WebView 临时指向 demo fixture（`?lang=` / `cabledrop.demo.lang` cookie），
+**不要对着真实服务拍**，否则会把你自己的文件名拍进去。
 
 ## 本地预览
 

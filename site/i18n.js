@@ -46,6 +46,18 @@
       'shots.panel.caption': '<strong>桌面面板</strong> —— 菜单栏窗口，380×540。深色模式跟随系统。',
       'shots.phone.caption': '<strong>手机页面</strong> —— 390×844 视口下的整页。任何手机浏览器，无需安装。',
 
+      // 截图路径也走字典：页面是双语的，图却只有一种语言的话，
+      // 切到另一种语言就会看到「英文界面配中文截图」这种明显穿帮。
+      // 英文用 docs/ 下的原名（README 和旧链接都指向它们），中文在 docs/zh/。
+      'shot.hero.src': '../docs/zh/panel-light.png',
+      'shot.hero.alt': 'CableDrop 桌面面板：顶部是已连接的安卓手机，四张操作卡片、保存位置卡片、最近传输列表，以及 USB 直连提示条。',
+      'shot.panel.src': '../docs/zh/panel-dark.png',
+      'shot.panel.alt': 'CableDrop 桌面面板，深色模式。',
+      'shot.phone.src': '../docs/zh/phone-light.png',
+      'shot.phone.alt': 'CableDrop 手机页面整页：顶部为已连接设备，一条 USB 直连提示，以及电脑发来的内容、电脑剪贴板、发到电脑、上传文件、浏览电脑共享目录等卡片。',
+      'shot.apk.src': '../docs/zh/apk-light.png',
+      'shot.apk.alt': 'CableDrop 作为已安装的安卓应用运行：已连接头部、绿色 USB 直连提示条、剪贴板卡片、发送文本卡片、上传卡片与文件浏览。',
+
       'how.title': '它是怎么工作的',
       'how.lede': '一个 Go 二进制。整条链路就是那根线。',
       'how.phone': '手机',
@@ -155,6 +167,19 @@
       'shots.lede': "The desktop panel and the phone page share the same colour tokens, radii and type scale — one stylesheet's worth of design decisions, applied to a 380×540 window and a 390×844 screen.",
       'shots.panel.caption': '<strong>Desktop panel</strong> — a menu bar window, 380×540. Dark mode follows the system.',
       'shots.phone.caption': '<strong>Phone page</strong> — the whole page at a 390×844 viewport. Any mobile browser, no install.',
+
+      // The screenshot paths live in the dictionary too: the page is bilingual,
+      // and a screenshot that stays in one language is the giveaway — English
+      // copy sitting over a Chinese UI. English keeps the docs/*.png names
+      // (README.md and older links point at them); Chinese lives in docs/zh/.
+      'shot.hero.src': '../docs/panel-light.png',
+      'shot.hero.alt': 'The CableDrop menu bar panel: a connected Android phone at the top, four action cards, a save-location card, the recent transfers list, and a USB trust banner.',
+      'shot.panel.src': '../docs/panel-dark.png',
+      'shot.panel.alt': 'The CableDrop desktop panel in dark mode.',
+      'shot.phone.src': '../docs/phone-light.png',
+      'shot.phone.alt': "The CableDrop phone page, full page: header with the connected device, a USB trust strip, and cards for content from the computer, the computer clipboard, sending text back, uploading files, and browsing the computer's shared folder.",
+      'shot.apk.src': '../docs/apk-light.png',
+      'shot.apk.alt': 'CableDrop running as an installed Android app: the connected header, the green USB-only strip, the clipboard card, the send-text card, the upload card and the file browser.',
 
       'how.title': 'How it works',
       'how.lede': 'One Go binary. The cable is the whole transport.',
