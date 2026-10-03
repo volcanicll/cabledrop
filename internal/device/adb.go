@@ -254,7 +254,7 @@ func (a *ADB) FirstDevice() (model.Device, error) {
 	}
 	dev := devices[0]
 	// Some vendors report no model: column at all — the panel would then show
-	// a bare serial like 40f844d3 as the device's name. One getprop call asks
+	// a bare serial like 0123456789ABCDEF as the device's name. One getprop call asks
 	// the phone itself; it only runs when a device appears or changes, never
 	// on a timer. Failure is silent: the listing name is still better than
 	// refusing to show the device.

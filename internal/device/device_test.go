@@ -343,7 +343,7 @@ func TestDeviceNameUnderscoresBecomeSpaces(t *testing.T) {
 	if got := (model.Device{Model: "Pixel_8_Pro"}).Name(); got != "Pixel 8 Pro" {
 		t.Fatalf("Name = %q", got)
 	}
-	if got := (model.Device{Serial: "40f844d3"}).Name(); got != "40f844d3" {
+	if got := (model.Device{Serial: "0123456789ABCDEF"}).Name(); got != "0123456789ABCDEF" {
 		t.Fatalf("serial fallback broken: %q", got)
 	}
 }
