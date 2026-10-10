@@ -5,6 +5,7 @@ import (
 	"encoding/hex"
 	"errors"
 	"fmt"
+	"os"
 	"os/exec"
 	"runtime"
 	"strings"
@@ -191,9 +192,44 @@ func (c *Clipboard) observeImage(png []byte) {
 
 // --- platform implementations -------------------------------------------
 
+// cmdEnv builds the environment for a pasteboard subprocess. It is the
+// parent's environment plus a UTF-8 locale when the parent has no locale at
+// all — the situation of a GUI app launched from Finder or Dock, whose
+// environment carries no LANG/LC_*.
+//
+// Without it, macOS's pbcopy and pbpaste treat stdin/stdout as non-UTF-8:
+// every multibyte character dies. Text sent from the phone landed as nothing
+// on the desktop, and desktop text reached the phone as mojibake, while pure
+// ASCII round-tripped fine. An environment that already names a locale —
+// LANG, LC_ALL or LC_CTYPE, however unusual — is left exactly as it is.
+//
+// On other platforms the commands do not consult the locale, so the given
+// environment passes through untouched.
+func cmdEnv(parent []string) []string {
+	if runtime.GOOS != "darwin" || hasLocale(parent) {
+		return parent
+	}
+	return append(parent, "LC_CTYPE=UTF-8")
+}
+
+// hasLocale reports whether the environment already pins character
+// classification somewhere: LANG, LC_ALL or LC_CTYPE.
+func hasLocale(env []string) bool {
+	for _, kv := range env {
+		if strings.HasPrefix(kv, "LC_ALL=") ||
+			strings.HasPrefix(kv, "LC_CTYPE=") ||
+			strings.HasPrefix(kv, "LANG=") {
+			return true
+		}
+	}
+	return false
+}
+
 func readClipboard() (string, error) {
 	name, args := clipboardReadCmd()
-	out, err := exec.Command(name, args...).Output()
+	cmd := exec.Command(name, args...)
+	cmd.Env = cmdEnv(os.Environ())
+	out, err := cmd.Output()
 	if err != nil {
 		return "", err
 	}
@@ -217,7 +253,9 @@ func readClipboardImage() ([]byte, error) {
 	if runtime.GOOS != "darwin" {
 		return nil, errNoImage
 	}
-	out, err := exec.Command("osascript", "-e", `the clipboard as «class PNGf»`).Output()
+	cmd := exec.Command("osascript", "-e", `the clipboard as «class PNGf»`)
+	cmd.Env = cmdEnv(os.Environ())
+	out, err := cmd.Output()
 	if err != nil {
 		return nil, errNoImage
 	}
@@ -250,6 +288,7 @@ func decodePNGfHex(s string) ([]byte, error) {
 func writeClipboard(s string) error {
 	name, args := clipboardWriteCmd()
 	cmd := exec.Command(name, args...)
+	cmd.Env = cmdEnv(os.Environ())
 	cmd.Stdin = strings.NewReader(s)
 	return cmd.Run()
 }

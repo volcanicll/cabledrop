@@ -253,3 +253,76 @@ func TestDecodePNGfHexToleratesNoiseAndAMissingTerminator(t *testing.T) {
 		t.Fatal("expected an error when the marker is absent")
 	}
 }
+
+// The pasteboard commands inherit the process environment, and a GUI app
+// launched from Finder/Dock has no LANG/LC_* at all. In that state pbcopy and
+// pbpaste treat stdin/stdout as non-UTF-8, so every multibyte character dies:
+// text sent from the phone arrived as nothing on the desktop, and desktop
+// text reached the phone as mojibake — while pure ASCII round-tripped fine,
+// which is why it looked like the bridge was broken for Chinese only.
+// cmdEnv must patch that hole on darwin.
+func TestCmdEnvFillsInAUTF8LocaleOnDarwin(t *testing.T) {
+	env := cmdEnv([]string{"HOME=/tmp", "PATH=/usr/bin:/bin"})
+	if runtime.GOOS == "darwin" {
+		if !hasLocale(env) {
+			t.Fatalf("darwin env without locale got none added: %v", env)
+		}
+	} else {
+		// Other platforms never had the bug; the environment must pass through
+		// untouched.
+		if len(env) != 2 || env[0] != "HOME=/tmp" || env[1] != "PATH=/usr/bin:/bin" {
+			t.Fatalf("non-darwin env was rewritten: %v", env)
+		}
+	}
+}
+
+// The patch must only fire when the environment is actually missing a locale:
+// a machine set up for another encoding, or with a locale already chosen, has
+// its own answer and we are not in the business of overriding it. "Left as is"
+// means not one entry added.
+func TestCmdEnvRespectsAnExistingLocale(t *testing.T) {
+	for _, existing := range []string{
+		"LANG=ja_JP.eucJP",
+		"LC_CTYPE=zh_CN.GB2312",
+		"LC_ALL=C",
+	} {
+		given := []string{"HOME=/tmp", existing}
+		env := cmdEnv(given)
+		if len(env) != len(given) {
+			t.Fatalf("%s: entries were added: %v", existing, env)
+		}
+		for i := range given {
+			if env[i] != given[i] {
+				t.Fatalf("%s: env changed at %d: %v", existing, i, env)
+			}
+		}
+	}
+}
+
+// cmdEnv passes through whatever the caller supplies — assembling the parent
+// environment is the call site's job (which passes os.Environ()). This pins
+// that the function itself adds nothing foreign and keeps the caller's order.
+func TestCmdEnvPassesTheCallerEnvironmentThrough(t *testing.T) {
+	given := []string{"LC_ALL=C"}
+	env := cmdEnv(given)
+	if len(env) != 1 || env[0] != "LC_ALL=C" {
+		t.Fatalf("env was rewritten: %v", env)
+	}
+
+	// On darwin a locale-less environment gets exactly one entry appended,
+	// after the caller's own.
+	if runtime.GOOS == "darwin" {
+		given := []string{"HOME=/tmp", "PATH=/usr/bin:/bin"}
+		env := cmdEnv(given)
+		want := append([]string{}, given...)
+		want = append(want, "LC_CTYPE=UTF-8")
+		if len(env) != len(want) {
+			t.Fatalf("env = %v, want %v", env, want)
+		}
+		for i := range want {
+			if env[i] != want[i] {
+				t.Fatalf("env = %v, want %v", env, want)
+			}
+		}
+	}
+}
