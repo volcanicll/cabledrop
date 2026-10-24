@@ -6,6 +6,7 @@ import (
 	"encoding/hex"
 	"errors"
 	"runtime"
+	"sync/atomic"
 	"testing"
 	"time"
 )
@@ -324,5 +325,72 @@ func TestCmdEnvPassesTheCallerEnvironmentThrough(t *testing.T) {
 				t.Fatalf("env = %v, want %v", env, want)
 			}
 		}
+	}
+}
+
+// Polling is the app's biggest idle cost — one pbpaste per second, plus one
+// osascript for the image — so it must run only while someone can read the
+// clipboard. Inactive: the ticker ticks and nothing else happens. Activating
+// wakes the loop for an immediate sample, so a page that just connected sees
+// the current clipboard without waiting out the tick.
+func TestPollingOnlyRunsWhileActive(t *testing.T) {
+	var reads atomic.Int64
+	c := New()
+	c.read = func() (string, error) { reads.Add(1); return "", nil }
+	c.readImage = func() ([]byte, error) { return nil, errNoImage }
+	c.interval = func() time.Duration { return 5 * time.Millisecond }
+
+	c.Start()
+	defer c.Stop()
+	// Start() seeds once so a first page has something to show; that single
+	// read is expected and is all an inactive clipboard ever does.
+	time.Sleep(60 * time.Millisecond)
+	if got := reads.Load(); got != 1 {
+		t.Fatalf("idle clipboard polled %d times, want only the seed", got)
+	}
+
+	c.SetActive(true)
+	deadline := time.Now().Add(time.Second)
+	for reads.Load() == 1 && time.Now().Before(deadline) {
+		time.Sleep(2 * time.Millisecond)
+	}
+	if reads.Load() == 1 {
+		t.Fatal("activation never produced a poll")
+	}
+
+	c.SetActive(false)
+	reads.Store(0)
+	time.Sleep(60 * time.Millisecond)
+	if got := reads.Load(); got != 0 {
+		t.Fatalf("deactivated clipboard polled %d times", got)
+	}
+}
+
+// The change hook fires for either side of the clipboard — text and image —
+// because the event stream pushes one "clip" event that carries both.
+func TestOnChangeAnyFiresForTextAndImage(t *testing.T) {
+	var png []byte
+	var fired atomic.Int64
+	c := New()
+	c.read = func() (string, error) { return "", nil }
+	c.readImage = func() ([]byte, error) {
+		if png == nil {
+			return nil, errNoImage
+		}
+		return png, nil
+	}
+	c.write = func(string) error { return nil }
+	c.interval = func() time.Duration { return time.Hour }
+	c.SetOnChangeAny(func() { fired.Add(1) })
+
+	c.pollOnce() // nothing changed yet: no event
+	if fired.Load() != 0 {
+		t.Fatal("an unchanged clipboard fired the hook")
+	}
+
+	png = []byte("png-bytes")
+	c.pollOnce()
+	if fired.Load() != 1 {
+		t.Fatalf("image change fired %d times, want 1", fired.Load())
 	}
 }

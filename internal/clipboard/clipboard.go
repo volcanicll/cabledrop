@@ -10,6 +10,7 @@ import (
 	"runtime"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 )
 
@@ -34,6 +35,10 @@ type Clipboard struct {
 	// onChange is called with new text whenever the clipboard changes.
 	onChange func(string)
 
+	// onChangeAny fires when either the text or the image changed — the
+	// change signal the event stream pushes to open pages.
+	onChangeAny func()
+
 	// read, readImage and write are the platform commands; interval how often
 	// to poll. Tests replace them, so none of the behaviour above depends on a
 	// real pasteboard being present.
@@ -41,6 +46,14 @@ type Clipboard struct {
 	readImage func() ([]byte, error)
 	write     func(string) error
 	interval  func() time.Duration
+
+	// active gates polling. Every tick forks the platform's pasteboard tools
+	// (on macOS one pbpaste plus one osascript), so an idle app must not
+	// watch at all: polling only runs while someone can read the clipboard —
+	// a phone page over the tunnel, or the panel's text view. False until
+	// SetActive(true).
+	active atomic.Bool
+	wake   chan struct{}
 }
 
 func New() *Clipboard {
@@ -89,10 +102,41 @@ func (c *Clipboard) Set(s string) error {
 	return nil
 }
 
+// SetOnChangeAny installs the change hook for either side of the clipboard.
+// Call before Start.
+func (c *Clipboard) SetOnChangeAny(f func()) {
+	c.mu.Lock()
+	c.onChangeAny = f
+	c.mu.Unlock()
+}
+
+// SetActive turns polling on or off. Turning it on wakes the loop for an
+// immediate sample, so a page that just connected sees the current clipboard
+// without waiting out the next tick. False by default.
+func (c *Clipboard) SetActive(on bool) {
+	if c.active.Swap(on) == on {
+		return
+	}
+	if !on {
+		return
+	}
+	// Rising edge: skip the sample if the loop has not started yet (Start
+	// seeds once itself); the non-blocking send means a shutdown race cannot
+	// block the caller.
+	if c.wake == nil {
+		return
+	}
+	select {
+	case c.wake <- struct{}{}:
+	default:
+	}
+}
+
 // Start begins watching. Safe to call more than once.
 func (c *Clipboard) Start() {
 	c.once.Do(func() {
 		c.stopCh = make(chan struct{})
+		c.wake = make(chan struct{}, 1)
 		// Seed once so the first page load has something to show.
 		if s, err := c.read(); err == nil {
 			c.mu.Lock()
@@ -122,15 +166,33 @@ func pollInterval() time.Duration {
 	return 1 * time.Second
 }
 
+// imageEvery is how many ticks pass between image reads. The image read is
+// the expensive half on macOS — one osascript spawn — while the text read is
+// one pbpaste. Halving the image cadence halves that cost; a screenshot
+// still reaches an open page within two ticks.
+const imageEvery = 2
+
 func (c *Clipboard) watch() {
 	t := time.NewTicker(c.interval())
 	defer t.Stop()
+	tick := 0
 	for {
 		select {
 		case <-c.stopCh:
 			return
-		case <-t.C:
+		case <-c.wake:
 			c.pollOnce()
+		case <-t.C:
+			// No consumer: touch nothing. The ticker keeps the loop alive but
+			// idle — no subprocess, no I/O, just a channel receive.
+			if !c.active.Load() {
+				continue
+			}
+			tick++
+			c.pollText()
+			if tick%imageEvery == 0 {
+				c.pollImage()
+			}
 		}
 	}
 }
@@ -139,12 +201,22 @@ func (c *Clipboard) watch() {
 // image into state. Split out of watch so tests can drive a tick without
 // waiting on the clock.
 func (c *Clipboard) pollOnce() {
+	c.pollText()
+	c.pollImage()
+}
+
+// pollText samples the clipboard's text. An error means "nothing readable" —
+// kept as-is rather than clearing, unlike the image side below.
+func (c *Clipboard) pollText() {
 	if s, err := c.read(); err == nil {
 		c.observe(s)
 	}
-	// An error from the image read means "no image on the clipboard" — that is
-	// how macOS answers when there is no PNG to fetch — so it clears rather
-	// than skips, unlike the text read above.
+}
+
+// pollImage samples the clipboard's image. An error from the image read means
+// "no image on the clipboard" — that is how macOS answers when there is no PNG
+// to fetch — so it clears rather than skips.
+func (c *Clipboard) pollImage() {
 	if png, err := c.readImage(); err == nil {
 		c.observeImage(png)
 	} else {
@@ -164,9 +236,13 @@ func (c *Clipboard) observe(s string) {
 	}
 	c.mu.Lock()
 	c.text = s
+	hook := c.onChangeAny
 	c.mu.Unlock()
 	if c.onChange != nil && s != "" {
 		c.onChange(s)
+	}
+	if hook != nil {
+		hook()
 	}
 }
 
@@ -187,7 +263,11 @@ func (c *Clipboard) observeImage(png []byte) {
 	c.mu.Lock()
 	c.png = png
 	c.sum = sum
+	hook := c.onChangeAny
 	c.mu.Unlock()
+	if hook != nil {
+		hook()
+	}
 }
 
 // --- platform implementations -------------------------------------------
