@@ -92,7 +92,7 @@ dmg: app-universal
 	@cp -R $(APPNAME).app build/darwin/dmg/
 	@ln -s /Applications build/darwin/dmg/Applications
 	@hdiutil create -quiet -volname "$(APPNAME)" -srcfolder build/darwin/dmg \
-		-ov -format UDZO "dist/$(APPNAME)-$(VERSION).dmg"
+		-ov -format ULMO "dist/$(APPNAME)-$(VERSION).dmg"
 	@rm -rf build/darwin/dmg
 	@echo "  dist/$(APPNAME)-$(VERSION).dmg"
 
