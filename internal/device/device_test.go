@@ -146,7 +146,7 @@ func TestPushFileCreatesDestinationThenPushes(t *testing.T) {
 	mkdir, push := -1, -1
 	for i, c := range f.commands {
 		switch {
-		case strings.Contains(c, "mkdir -p '/sdcard/Download/'"):
+		case strings.Contains(c, "mkdir -p '/sdcard/Download'"):
 			mkdir = i
 		case strings.Contains(c, "push /tmp/photo.jpg /sdcard/Download/"):
 			push = i
@@ -179,14 +179,26 @@ func TestPullFileChecksThePath(t *testing.T) {
 
 func TestDeviceDirsOnlyReportsWhatExists(t *testing.T) {
 	f := newFakeADB(func(cmd string) (string, error) {
-		if strings.Contains(cmd, "/sdcard/Download") || strings.Contains(cmd, "/sdcard/DCIM/Camera") {
-			return "yes", nil
+		// The whole candidate list travels in one shell invocation; the
+		// device answers with a "name|path" line per directory that exists.
+		if !strings.Contains(cmd, "/sdcard/Download") || !strings.Contains(cmd, "/sdcard/DCIM/Camera") {
+			t.Errorf("candidates missing from the single command: %q", cmd)
 		}
-		return "", errors.New("missing")
+		return "Download|/sdcard/Download\n相机|/sdcard/DCIM/Camera\n", nil
 	})
 	dirs := f.DeviceDirs()
 	if len(dirs) != 2 || dirs[0].Name != "Download" || dirs[1].Name != "相机" {
 		t.Fatalf("dirs = %+v", dirs)
+	}
+	// The optimization this pins: one spawn, not one per candidate.
+	shells := 0
+	for _, c := range f.commands {
+		if strings.HasPrefix(c, "shell ") {
+			shells++
+		}
+	}
+	if shells != 1 {
+		t.Fatalf("shell commands = %d (%v), want exactly one", shells, f.commands)
 	}
 }
 
@@ -345,5 +357,66 @@ func TestDeviceNameUnderscoresBecomeSpaces(t *testing.T) {
 	}
 	if got := (model.Device{Serial: "0123456789ABCDEF"}).Name(); got != "0123456789ABCDEF" {
 		t.Fatalf("serial fallback broken: %q", got)
+	}
+}
+
+// PushPrepared is the per-file half of a batch: no directory resolution, no
+// mkdir — the batch did that once — but the path whitelist still stands.
+func TestPushPreparedSkipsResolutionAndCreation(t *testing.T) {
+	f := newFakeADB(func(string) (string, error) {
+		t.Fatal("no shell call was expected before the push")
+		return "", nil
+	})
+	f.pushReply = func(local, remote string) (string, string, int, error) {
+		return "", "", 0, nil
+	}
+
+	remote, err := f.PushPrepared("/tmp/photo.jpg", "/sdcard/Download")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if remote != "/sdcard/Download/photo.jpg" {
+		t.Fatalf("remote = %q", remote)
+	}
+	if len(f.commands) != 1 || !strings.HasPrefix(f.commands[0], "push ") {
+		t.Fatalf("commands = %v, want exactly one push", f.commands)
+	}
+
+	if _, err := f.PushPrepared("/tmp/x", "/data/local"); !errors.Is(err, model.ErrBadDevicePath) {
+		t.Fatalf("err = %v, want ErrBadDevicePath", err)
+	}
+}
+
+func TestEnsureDirCreatesAndRejects(t *testing.T) {
+	f := newFakeADB(func(string) (string, error) { return "", nil })
+	if err := f.EnsureDir("/sdcard/newdir"); err != nil {
+		t.Fatal(err)
+	}
+	if len(f.commands) != 1 || !strings.Contains(f.commands[0], "mkdir -p '/sdcard/newdir'") {
+		t.Fatalf("commands = %v", f.commands)
+	}
+	if err := f.EnsureDir("/data/local"); !errors.Is(err, model.ErrBadDevicePath) {
+		t.Fatalf("err = %v, want ErrBadDevicePath", err)
+	}
+	if len(f.commands) != 1 {
+		t.Fatal("a rejected path ran commands")
+	}
+}
+
+// DeviceFileSize is what makes a single large push show a real percentage:
+// during the transfer the remote file grows in place, and one stat per
+// sample turns that growth into progress.
+func TestDeviceFileSizeReadsTheRemoteStat(t *testing.T) {
+	f := newFakeADB(func(cmd string) (string, error) {
+		if strings.Contains(cmd, "'/sdcard/x'") {
+			return "12345\n", nil
+		}
+		return "", errors.New("no such file")
+	})
+	if got := f.DeviceFileSize("/sdcard/x"); got != 12345 {
+		t.Fatalf("size = %d, want 12345", got)
+	}
+	if got := f.DeviceFileSize("/sdcard/missing"); got != -1 {
+		t.Fatalf("size = %d, want -1 for an unreadable file", got)
 	}
 }

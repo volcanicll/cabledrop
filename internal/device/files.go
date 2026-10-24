@@ -129,6 +129,11 @@ func baseName(p string) string {
 }
 
 // PushFile copies a local file onto the device. Returns the device path.
+//
+// Resolves a missing destination, creates it and pushes in one call — the
+// form single pushes use. Batches should resolve and create the directory
+// once (DefaultUploadDir + EnsureDir) and then use PushPrepared per file:
+// a batch of N files must not pay N times for the same adb round trips.
 func (a *ADB) PushFile(local, remoteDir string) (string, error) {
 	if remoteDir == "" {
 		remoteDir = a.defaultUploadDir()
@@ -136,13 +141,21 @@ func (a *ADB) PushFile(local, remoteDir string) (string, error) {
 	if err := CheckDevicePath(remoteDir); err != nil {
 		return "", err
 	}
+	if err := a.EnsureDir(remoteDir); err != nil {
+		return "", err
+	}
+	return a.PushPrepared(local, remoteDir)
+}
+
+// PushPrepared pushes into a destination directory that EnsureDir has
+// already created and validated. It is the per-file half of a batch push.
+func (a *ADB) PushPrepared(local, remoteDir string) (string, error) {
+	if err := CheckDevicePath(remoteDir); err != nil {
+		return "", err
+	}
 	// adb push wants a trailing slash to mean "into this directory".
 	if !strings.HasSuffix(remoteDir, "/") {
 		remoteDir += "/"
-	}
-	// A missing destination directory fails the push outright.
-	if _, err := a.Shell(10*time.Second, "mkdir -p "+shellQuote(remoteDir)); err != nil {
-		return "", err
 	}
 	_, errOut, code, err := a.Run(30*time.Minute, "push", local, remoteDir)
 	if err != nil {
@@ -152,6 +165,16 @@ func (a *ADB) PushFile(local, remoteDir string) (string, error) {
 		return "", fmt.Errorf("发送失败: %s", strings.TrimSpace(errOut))
 	}
 	return remoteDir + baseName(local), nil
+}
+
+// EnsureDir creates a directory on the device, rejecting paths outside the
+// whitelist first. Batches call it once, before the per-file pushes.
+func (a *ADB) EnsureDir(dir string) error {
+	if err := CheckDevicePath(dir); err != nil {
+		return err
+	}
+	_, err := a.Shell(10*time.Second, "mkdir -p "+shellQuote(dir))
+	return err
 }
 
 // PullFile copies a device file into a local directory.
@@ -183,6 +206,10 @@ func (a *ADB) DeletePath(remote string) error {
 
 // DeviceDirs are the places people actually put things, in the order worth
 // offering. Only ones that exist on the device are returned.
+//
+// All six candidates are tested by one shell invocation: each adb process
+// spawn costs tens of milliseconds, and this runs every time a file browser
+// view opens, so six sequential calls were half a second of dead air.
 func (a *ADB) DeviceDirs() []model.Entry {
 	candidates := []struct{ name, path string }{
 		{"Download", "/sdcard/Download"},
@@ -192,13 +219,28 @@ func (a *ADB) DeviceDirs() []model.Entry {
 		{"文档", "/sdcard/Documents"},
 		{"根目录", "/sdcard"},
 	}
-	out := make([]model.Entry, 0, len(candidates))
+	var b strings.Builder
 	for _, c := range candidates {
-		if _, err := a.Shell(8*time.Second, "test -d "+shellQuote(c.path)+" && echo yes"); err == nil {
-			out = append(out, model.Entry{Name: c.name, Path: c.path, Dir: true})
-		}
+		// "name|path" on one line, exactly when the directory exists. Quoted
+		// constants, no shell expansion — portable across toybox and mksh.
+		b.WriteString("[ -d " + shellQuote(c.path) + " ] && echo " +
+			shellQuote(c.name+"|"+c.path) + "; ")
 	}
-	return out
+	b.WriteString("true")
+
+	out, err := a.Shell(15*time.Second, b.String())
+	if err != nil {
+		return nil
+	}
+	entries := make([]model.Entry, 0, len(candidates))
+	for _, line := range strings.Split(out, "\n") {
+		parts := strings.SplitN(strings.TrimSpace(line), "|", 2)
+		if len(parts) != 2 {
+			continue
+		}
+		entries = append(entries, model.Entry{Name: parts[0], Path: parts[1], Dir: true})
+	}
+	return entries
 }
 
 // defaultUploadDir picks somewhere that exists to receive a pushed file.
@@ -211,6 +253,22 @@ func (a *ADB) defaultUploadDir() string {
 		}
 	}
 	return "/sdcard"
+}
+
+// DeviceFileSize reports how many bytes a device file currently holds, or -1
+// when it cannot be stat'ed. During a push the file grows in place, so
+// sampling this every couple of seconds turns an indeterminate transfer into
+// an honest percentage for the price of one shell call per sample.
+func (a *ADB) DeviceFileSize(remote string) int64 {
+	out, err := a.Shell(8*time.Second, "stat -c %s "+shellQuote(remote))
+	if err != nil {
+		return -1
+	}
+	n, err := strconv.ParseInt(strings.TrimSpace(out), 10, 64)
+	if err != nil {
+		return -1
+	}
+	return n
 }
 
 // FreeSpaceOnDevice reports the phone's free storage, for the status line.
@@ -236,10 +294,22 @@ func ListDir(dir string) ([]model.Entry, error) { return Default.ListDir(dir) }
 
 func PushFile(local, remoteDir string) (string, error) { return Default.PushFile(local, remoteDir) }
 
+func PushPrepared(local, remoteDir string) (string, error) {
+	return Default.PushPrepared(local, remoteDir)
+}
+
+func EnsureDir(dir string) error { return Default.EnsureDir(dir) }
+
 func PullFile(remote, localDir string) (string, error) { return Default.PullFile(remote, localDir) }
 
 func DeletePath(remote string) error { return Default.DeletePath(remote) }
 
 func DeviceDirs() []model.Entry { return Default.DeviceDirs() }
 
+func DeviceFileSize(remote string) int64 { return Default.DeviceFileSize(remote) }
+
 func FreeSpaceOnDevice() string { return Default.FreeSpaceOnDevice() }
+
+// DefaultUploadDir picks somewhere that exists to receive pushed files.
+// Batches resolve this once, not once per file.
+func DefaultUploadDir() string { return Default.defaultUploadDir() }
