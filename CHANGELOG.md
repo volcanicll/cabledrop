@@ -4,6 +4,62 @@ All notable changes to CableDrop are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); versioning is
 [SemVer](https://semver.org/).
 
+## 0.0.4 - 2026-10-25
+
+### Added
+
+- Real transfer progress where there was only a moving bar: pulls watch the
+  local file grow (one `os.Stat` per second, no adb at all) with the expected
+  size passed over from the listing; a single large push samples the
+  device-side file size; every finished push and pull records its measured
+  speed when it ran long enough for one to be honest
+- A completed pull's history row carries a reveal action — one click shows
+  the file selected in Finder or Explorer instead of a hunt through the
+  shared folder (`/api/shared/reveal`, desktop only, resolved inside the
+  shared root)
+- A system notification when a transfer finishes while the panel is hidden
+  (macOS; the panel being open is notification enough)
+- An honest boot failure: a page whose first state never arrives — the
+  process quit, or the page was opened somewhere the API cannot answer —
+  retires its skeleton, stops claiming to detect, disables the tiles and
+  offers a retry card
+
+### Changed
+
+- The phone page runs on an event stream instead of polling: one SSE
+  connection (`/api/events`) pushes state, clipboard and note changes the
+  moment they happen, with an opening snapshot so a fresh page renders
+  without priming fetches. Polling remains only as the fallback for engines
+  or tunnels where the stream cannot run, and the page gives the stream
+  another chance every time it comes back to the foreground
+- The panel polls only while it can be seen: the shell tells the page on
+  every show and hide, so a hidden panel spends no timers, and opening it
+  paints now-state immediately
+- Clipboard mirroring runs only while someone can read it — a phone page
+  over the tunnel, or the panel's text view. An idle CableDrop no longer
+  forks `pbpaste` + `osascript` every second (PowerShell every two seconds
+  on Windows); even while active, the image half is read every other tick
+- A batch push resolves its destination and creates it once, not once per
+  file, and the device's quick-dir list is a single shell call instead of
+  six
+- Phone uploads stream straight to disk (no temp-file round trip for large
+  videos) and go one file at a time, each with its own progress bar and its
+  own failure, instead of one blended bar where a mid-batch drop lost
+  everything
+- Static assets carry a content-hash ETag and ship gzipped, and the
+  clipboard image answers `If-None-Match` with a 304 — a phone that already
+  has today's page revalidates for free
+- Action failures in the panel surface as the page's own toast instead of
+  `alert()` dialogs
+- The macOS disk image is LZMA-compressed (ULMO): the same app packs about
+  30% smaller
+
+### Fixed
+
+- The loading skeleton can no longer appear above the already-dressed page:
+  while the first state is pending, the skeleton stands in for the whole
+  view
+
 ## 0.0.3 - 2026-10-10
 
 ### Fixed
