@@ -280,7 +280,7 @@ func TestPullDeviceFileGoesThroughTheFake(t *testing.T) {
 	a.pullFile = func(remote, localDir string) (string, error) {
 		return localDir + "/x.jpg", nil
 	}
-	a.PullDeviceFile("/sdcard/DCIM/x.jpg")
+	a.PullDeviceFile("/sdcard/DCIM/x.jpg", 0)
 	waitFor(t, func() bool {
 		st := a.State()
 		return len(st.Transfers) == 1 && st.Transfers[0].State == "done"
@@ -577,12 +577,82 @@ func TestPullRecordsTheSizeItLearned(t *testing.T) {
 		os.WriteFile(dest, make([]byte, 4321), 0o644)
 		return dest, nil
 	}
-	a.PullDeviceFile("/sdcard/pulled.bin")
+	a.PullDeviceFile("/sdcard/pulled.bin", 0)
 	waitFor(t, func() bool {
 		st := a.State()
 		return len(st.Transfers) == 1 && st.Transfers[0].State == "done"
 	})
 	if got := a.State().Transfers[0].Size; got != 4321 {
 		t.Fatalf("size = %d, want 4321 (stat of the local copy)", got)
+	}
+}
+
+func TestPullRecordsExpectedSizeAndLocalPath(t *testing.T) {
+	a := New()
+	dir := t.TempDir()
+	a.serveDir = dir
+	a.pullFile = func(remote, localDir string) (string, error) {
+		dest := filepath.Join(localDir, "big.bin")
+		os.WriteFile(dest, make([]byte, 999), 0o644)
+		return dest, nil
+	}
+	// The caller knows the expected size from the listing; the row carries it
+	// from the start, and when the pull lands the local path is recorded for
+	// the row's reveal action.
+	a.PullDeviceFile("/sdcard/big.bin", 1000)
+	waitFor(t, func() bool {
+		st := a.State()
+		return len(st.Transfers) == 1 && st.Transfers[0].State == "done"
+	})
+	tr := a.State().Transfers[0]
+	if tr.Size != 999 {
+		t.Fatalf("size = %d, want 999 (the local stat)", tr.Size)
+	}
+	if tr.LocalPath != filepath.Join(dir, "big.bin") {
+		t.Fatalf("localPath = %q", tr.LocalPath)
+	}
+}
+
+func TestSubscribeSignalsStateAndNote(t *testing.T) {
+	a := New()
+	sub := a.Subscribe()
+	defer sub.Cancel()
+
+	a.addTransfer("x", "push", 0)
+	select {
+	case <-sub.State:
+	case <-time.After(time.Second):
+		t.Fatal("addTransfer produced no state signal")
+	}
+
+	a.SetNote("hello")
+	select {
+	case <-sub.Note:
+	case <-time.After(time.Second):
+		t.Fatal("SetNote produced no note signal")
+	}
+
+	// A burst coalesces into one pending signal per topic, never a queue.
+	for i := 0; i < 50; i++ {
+		a.addTransfer("x", "push", 0)
+	}
+	select {
+	case <-sub.State:
+	default:
+	}
+}
+
+func TestHumanRateNeedsBytesAndATolerableDuration(t *testing.T) {
+	if humanRate(0, 2*time.Second) != "" {
+		t.Fatal("no size, no rate")
+	}
+	if humanRate(100, 500*time.Millisecond) != "" {
+		t.Fatal("too fast to be honest, no rate")
+	}
+	if got := humanRate(2<<20, time.Second); got != "2.0 MB/s" {
+		t.Fatalf("rate = %q, want 2.0 MB/s", got)
+	}
+	if got := humanRate(3<<30, 2*time.Second); got != "1.5 GB/s" {
+		t.Fatalf("rate = %q, want 1.5 GB/s", got)
 	}
 }

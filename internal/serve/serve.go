@@ -9,13 +9,16 @@ package serve
 
 import (
 	"bytes"
+	"compress/gzip"
+	"crypto/sha256"
 	"embed"
+	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
 	"io/fs"
-	"mime/multipart"
+	"mime"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -28,6 +31,18 @@ import (
 
 //go:embed all:assets
 var assetsFS embed.FS
+
+// Subscriptions is one event-stream client's wake channels. Each topic
+// carries a coalesced signal — one buffered slot — when its data changed;
+// the handler then reads the payload through the ordinary Backend getters,
+// so what an event delivers is exactly what a poll would have returned.
+type Subscriptions struct {
+	State <-chan struct{}
+	Clip  <-chan struct{}
+	Note  <-chan struct{}
+	// Cancel unregisters the subscriber; must be called when the stream ends.
+	Cancel func()
+}
 
 // Backend is everything the HTTP handlers need from the application. It is the
 // seam that keeps serve independent of the app and testable on its own.
@@ -61,17 +76,23 @@ type Backend interface {
 	// whitelist, so callers get a synchronous 403 instead of a failed row.
 	CheckDevicePath(path string) error
 	// PullDeviceFile copies a device file into the shared folder, in the
-	// background; the transfer shows up in State.
-	PullDeviceFile(remote string)
+	// background; the transfer shows up in State. The expected size, when
+	// the caller knows it from a listing, drives a real progress bar.
+	PullDeviceFile(remote string, size int64)
 	DeleteDevicePath(remote string) error
 	PushFiles(paths []string, destDir string)
 	ClearTransfers()
+
+	// Subscribe registers an event-stream client: wake channels per topic
+	// (state / clip / note) plus a Cancel for when the stream ends.
+	Subscribe() Subscriptions
 
 	// PickFiles and PickDir open the system file picker. Implementations step
 	// the panel aside while the dialog is up.
 	PickFiles(prompt string) ([]string, error)
 	PickDir(prompt string) (string, error)
-	// OpenPath reveals a folder in the platform file manager.
+	// OpenPath opens a directory in, or reveals a file in, the platform file
+	// manager.
 	OpenPath(path string)
 
 	HidePanel()
@@ -119,29 +140,29 @@ func NewHandler(backend Backend, forPhone bool) http.Handler {
 	// --- desktop clipboard, both directions ---------------------------
 
 	mux.HandleFunc("GET /api/clip", func(w http.ResponseWriter, r *http.Request) {
-		_, sum := b.ClipboardImage()
-		writeJSON(w, map[string]any{
-			"text": b.ClipboardText(),
-			"at":   time.Now().Unix(),
-			// Fingerprint of the clipboard's image, "" when there is none.
-			// Extra key: older pages that never read it keep working.
-			"image": sum,
-		})
+		writeJSON(w, clipPayload(b))
 	})
 
 	// The clipboard's image, for the phone to preview and copy. 404 when the
 	// clipboard holds no image — an everyday state, not an error page.
 	// ?dl=1 marks the body as an attachment, which is the fallback path for
 	// phones whose browser cannot write images to their own clipboard: the
-	// WebView's download handler picks it up and saves it.
+	// WebView's download handler picks it up and saves it. The ETag answers
+	// If-None-Match with a 304, so a page that already has this picture pays
+	// nothing to confirm it is still current.
 	mux.HandleFunc("GET /api/clip/image", func(w http.ResponseWriter, r *http.Request) {
 		png, sum := b.ClipboardImage()
 		if len(png) == 0 {
 			httpError(w, http.StatusNotFound, "电脑剪贴板里没有图片")
 			return
 		}
+		etag := `"` + sum + `"`
+		if matchETag(r.Header.Get("If-None-Match"), etag) {
+			w.WriteHeader(http.StatusNotModified)
+			return
+		}
 		w.Header().Set("Content-Type", "image/png")
-		w.Header().Set("ETag", `"`+sum+`"`)
+		w.Header().Set("ETag", etag)
 		if r.URL.Query().Get("dl") != "" {
 			name := time.Now().Format("cabledrop-20060102-150405.png")
 			w.Header().Set("Content-Disposition",
@@ -172,6 +193,99 @@ func NewHandler(backend Backend, forPhone bool) http.Handler {
 	mux.HandleFunc("GET /api/note", func(w http.ResponseWriter, r *http.Request) {
 		text, at := b.Note()
 		writeJSON(w, map[string]any{"text": text, "at": at})
+	})
+
+	// --- event stream ----------------------------------------------------
+	//
+	// One server-sent-events connection replaces the phone page's three
+	// polling loops: state, clipboard and note changes are pushed the moment
+	// they happen, so the page reacts instantly and an idle cable carries no
+	// requests at all. Every event carries the same JSON the polling
+	// endpoints return, so the page's rendering code is identical for both.
+	mux.HandleFunc("GET /api/events", func(w http.ResponseWriter, r *http.Request) {
+		fl, ok := w.(http.Flusher)
+		if !ok {
+			httpError(w, http.StatusInternalServerError, "此连接不支持流式响应")
+			return
+		}
+		sub := b.Subscribe()
+		defer sub.Cancel()
+
+		h := w.Header()
+		h.Set("Content-Type", "text/event-stream")
+		h.Set("Cache-Control", "no-store")
+		h.Set("X-Accel-Buffering", "no")
+		w.WriteHeader(http.StatusOK)
+		// Ask the browser to reconnect on its own when the tunnel blips.
+		io.WriteString(w, "retry: 3000\n\n")
+		fl.Flush()
+
+		send := func(event string, v any) bool {
+			data, err := json.Marshal(v)
+			if err != nil {
+				return true // one bad payload is not worth killing the stream
+			}
+			if _, err := fmt.Fprintf(w, "event: %s\ndata: %s\n\n", event, data); err != nil {
+				return false
+			}
+			fl.Flush()
+			return true
+		}
+
+		// The opening snapshot: a freshly connected page renders from events
+		// alone, no priming fetches.
+		if !send("state", b.State()) ||
+			!send("clip", clipPayload(b)) ||
+			!send("note", notePayload(b)) {
+			return
+		}
+
+		// Bursts (a ten-file batch finishing) coalesce into one payload: a
+		// short settle, then drain whatever queued behind the first signal.
+		drain := func(ch <-chan struct{}) {
+			for {
+				select {
+				case <-ch:
+				default:
+					return
+				}
+			}
+		}
+		debounced := func(ch <-chan struct{}) {
+			time.Sleep(40 * time.Millisecond)
+			drain(ch)
+		}
+
+		ping := time.NewTicker(15 * time.Second)
+		defer ping.Stop()
+		for {
+			select {
+			case <-r.Context().Done():
+				return
+			case <-ping.C:
+				// Comment line: keeps proxies and the tunnel from reaping an
+				// idle connection without disturbing the client.
+				if _, err := io.WriteString(w, ": ping\n\n"); err != nil {
+					return
+				}
+				fl.Flush()
+			case <-sub.State:
+				debounced(sub.State)
+				if !send("state", b.State()) {
+					return
+				}
+			case <-sub.Clip:
+				debounced(sub.Clip)
+				if !send("clip", clipPayload(b)) {
+					return
+				}
+			case <-sub.Note:
+				debounced(sub.Note)
+				if !send("note", notePayload(b)) {
+					return
+				}
+			}
+		}
 	})
 
 	mux.HandleFunc("POST /api/note", func(w http.ResponseWriter, r *http.Request) {
@@ -212,6 +326,7 @@ func NewHandler(backend Backend, forPhone bool) http.Handler {
 	mux.HandleFunc("POST /api/device/pull", func(w http.ResponseWriter, r *http.Request) {
 		var body struct {
 			Path string `json:"path"`
+			Size int64  `json:"size"`
 		}
 		if err := json.NewDecoder(r.Body).Decode(&body); err != nil || body.Path == "" {
 			httpError(w, http.StatusBadRequest, "缺少 path")
@@ -225,7 +340,7 @@ func NewHandler(backend Backend, forPhone bool) http.Handler {
 			httpError(w, http.StatusForbidden, err.Error())
 			return
 		}
-		b.PullDeviceFile(body.Path)
+		b.PullDeviceFile(body.Path, body.Size)
 		writeJSON(w, map[string]any{"ok": true, "into": b.ServeDir()})
 	})
 
@@ -360,6 +475,34 @@ func NewHandler(backend Backend, forPhone bool) http.Handler {
 		writeJSON(w, map[string]any{"ok": true})
 	})
 
+	// Reveals one file inside the shared folder — the action behind a pulled
+	// transfer's history row. Native only, and the path must resolve inside
+	// the shared root, exactly like /dl.
+	mux.HandleFunc("POST /api/shared/reveal", func(w http.ResponseWriter, r *http.Request) {
+		if !b.Native() {
+			httpError(w, http.StatusNotImplemented, "此接口只在桌面端可用")
+			return
+		}
+		var body struct {
+			Path string `json:"path"`
+		}
+		if err := json.NewDecoder(r.Body).Decode(&body); err != nil || body.Path == "" {
+			httpError(w, http.StatusBadRequest, "缺少 path")
+			return
+		}
+		target, err := safeJoin(b.ServeDir(), body.Path)
+		if err != nil {
+			httpError(w, http.StatusForbidden, "路径不在共享目录内")
+			return
+		}
+		if _, err := os.Stat(target); err != nil {
+			httpError(w, http.StatusNotFound, "文件不存在")
+			return
+		}
+		b.OpenPath(target)
+		writeJSON(w, map[string]any{"ok": true})
+	})
+
 	// Hides the panel. The page calls it on Escape; the tray icon and clicks
 	// outside the panel are handled natively. Native only, so a stray request
 	// from the phone cannot dismiss a panel nobody is looking at.
@@ -396,17 +539,46 @@ func NewHandler(backend Backend, forPhone bool) http.Handler {
 	})
 
 	// The phone uploads a file into the shared folder.
+	//
+	// Streaming, not ParseMultipartForm: parsing would stage the whole body
+	// into temp files first and then copy each one into place — every large
+	// video written to disk twice. MultipartReader hands over each part as
+	// it arrives, so bytes land directly in their destination.
 	mux.HandleFunc("POST /upload", func(w http.ResponseWriter, r *http.Request) {
-		if err := r.ParseMultipartForm(64 << 20); err != nil {
+		mr, err := r.MultipartReader()
+		if err != nil {
 			httpError(w, http.StatusBadRequest, "上传解析失败: "+err.Error())
 			return
 		}
-		saved, err := saveUploads(r.MultipartForm, b.ServeDir())
-		if err != nil {
-			httpError(w, http.StatusInternalServerError, err.Error())
-			return
+		dir := b.ServeDir()
+		var saved []string
+		for {
+			part, err := mr.NextPart()
+			if err == io.EOF {
+				break
+			}
+			if err != nil {
+				httpError(w, http.StatusBadRequest, "上传中断: "+err.Error())
+				return
+			}
+			name := sanitiseName(part.FileName())
+			if part.FormName() != "files" || name == "" {
+				io.Copy(io.Discard, part)
+				part.Close()
+				continue
+			}
+			dest := uniquePath(filepath.Join(dir, name))
+			if err := streamToFile(part, dest); err != nil {
+				// Nothing truncated stays behind pretending to be the file.
+				os.Remove(dest)
+				part.Close()
+				httpError(w, http.StatusInternalServerError, "保存失败: "+err.Error())
+				return
+			}
+			part.Close()
+			saved = append(saved, dest)
 		}
-		writeJSON(w, map[string]any{"ok": true, "saved": saved, "into": b.ServeDir()})
+		writeJSON(w, map[string]any{"ok": true, "saved": saved, "into": dir})
 	})
 
 	// --- server on/off -------------------------------------------------
@@ -442,6 +614,59 @@ func NewHandler(backend Backend, forPhone bool) http.Handler {
 	return mux
 }
 
+// bundled is one pre-digested static asset: its bytes, a gzip rendition for
+// clients that accept one, and a strong content-hash etag.
+type bundled struct {
+	data  []byte
+	gz    []byte
+	etag  string
+	ctype string
+}
+
+// bundleAssets walks the embedded tree once, at handler construction. Only
+// already-compressed formats are skipped — the JS and CSS that dominate page
+// weight shrink to about a third over the tunnel, and the etag lets a phone
+// that already has today's build answer 304 without re-downloading anything.
+func bundleAssets(fsys fs.FS) map[string]*bundled {
+	out := map[string]*bundled{}
+	err := fs.WalkDir(fsys, ".", func(p string, d fs.DirEntry, err error) error {
+		if err != nil || d.IsDir() {
+			return err
+		}
+		switch filepath.Ext(p) {
+		case ".js", ".css", ".svg", ".png":
+		default:
+			return nil
+		}
+		data, err := fs.ReadFile(fsys, p)
+		if err != nil {
+			return nil // a missing asset degrades to the file server path
+		}
+		sum := sha256.Sum256(data)
+		b := &bundled{
+			data:  data,
+			etag:  fmt.Sprintf(`"cabledrop1-%s"`, hex.EncodeToString(sum[:16])),
+			ctype: mime.TypeByExtension(filepath.Ext(p)),
+		}
+		if b.ctype == "" {
+			b.ctype = "application/octet-stream"
+		}
+		var buf bytes.Buffer
+		gz, _ := gzip.NewWriterLevel(&buf, gzip.BestCompression)
+		gz.Write(data)
+		gz.Close()
+		if buf.Len() < len(data) {
+			b.gz = buf.Bytes()
+		}
+		out[p] = b
+		return nil
+	})
+	if err != nil {
+		return nil
+	}
+	return out
+}
+
 // staticHandler serves the bundled page, choosing the phone's layout for
 // requests that arrived over the tunnel.
 //
@@ -450,7 +675,7 @@ func NewHandler(backend Backend, forPhone bool) http.Handler {
 // clicking the tray icon, which makes it impossible to inspect or screenshot
 // during development.
 func staticHandler(fsys fs.FS, forPhone bool) http.Handler {
-	fileServer := http.FileServer(http.FS(fsys))
+	bundled := bundleAssets(fsys)
 	page := "panel.html"
 	if forPhone {
 		page = "phone.html"
@@ -463,25 +688,57 @@ func staticHandler(fsys fs.FS, forPhone bool) http.Handler {
 		case "/panel":
 			serve = "panel.html"
 		}
-		if serve == "" {
-			fileServer.ServeHTTP(w, r)
+		if serve != "" {
+			data, err := fs.ReadFile(fsys, serve)
+			if err != nil {
+				http.Error(w, "页面缺失: "+err.Error(), http.StatusInternalServerError)
+				return
+			}
+			// When this build has the transparent webview, tell the page to
+			// draw a translucent tint over the native vibrancy instead of
+			// solid paint. Injected on <head> so the class lands before
+			// first paint.
+			if serve == "panel.html" && translucentChrome {
+				data = bytes.Replace(data, []byte("<head>"),
+					[]byte("<head><script>document.documentElement.classList.add('native-glass')</script>"), 1)
+			}
+			w.Header().Set("Content-Type", "text/html; charset=utf-8")
+			w.Header().Set("Cache-Control", "no-store")
+			w.Write(data)
 			return
 		}
-		data, err := fs.ReadFile(fsys, serve)
-		if err != nil {
-			http.Error(w, "页面缺失: "+err.Error(), http.StatusInternalServerError)
+
+		// Pre-digested assets: etag revalidation plus gzip when accepted.
+		// The map is keyed the way fs.WalkDir spells paths, without the
+		// leading slash the URL carries.
+		if b, ok := bundled[strings.TrimPrefix(r.URL.Path, "/")]; ok && (r.Method == http.MethodGet || r.Method == http.MethodHead) {
+			w.Header().Set("ETag", b.etag)
+			w.Header().Set("Vary", "Accept-Encoding")
+			if matchETag(r.Header.Get("If-None-Match"), b.etag) {
+				w.WriteHeader(http.StatusNotModified)
+				return
+			}
+			w.Header().Set("Content-Type", b.ctype)
+			// no-cache: the etag makes revalidation nearly free, and a new
+			// build must never serve an old script from a phone's cache.
+			w.Header().Set("Cache-Control", "no-cache")
+			if b.gz != nil && strings.Contains(r.Header.Get("Accept-Encoding"), "gzip") {
+				w.Header().Set("Content-Encoding", "gzip")
+				if r.Method == http.MethodHead {
+					return
+				}
+				w.Write(b.gz)
+				return
+			}
+			if r.Method == http.MethodHead {
+				return
+			}
+			w.Write(b.data)
 			return
 		}
-		// When this build has the transparent webview, tell the page to draw
-		// a translucent tint over the native vibrancy instead of solid paint.
-		// Injected on <head> so the class lands before first paint.
-		if serve == "panel.html" && translucentChrome {
-			data = bytes.Replace(data, []byte("<head>"),
-				[]byte("<head><script>document.documentElement.classList.add('native-glass')</script>"), 1)
-		}
-		w.Header().Set("Content-Type", "text/html; charset=utf-8")
-		w.Header().Set("Cache-Control", "no-store")
-		w.Write(data)
+
+		fileServer := http.FileServer(http.FS(fsys))
+		fileServer.ServeHTTP(w, r)
 	})
 }
 
@@ -502,6 +759,37 @@ func writeJSON(w http.ResponseWriter, v any) {
 	w.Header().Set("Content-Type", "application/json; charset=utf-8")
 	w.Header().Set("Cache-Control", "no-store")
 	json.NewEncoder(w).Encode(v)
+}
+
+// clipPayload is the clipboard snapshot shape both /api/clip and the event
+// stream's "clip" event speak. The image fingerprint lets a page notice a
+// new picture without downloading its bytes.
+func clipPayload(b Backend) map[string]any {
+	_, sum := b.ClipboardImage()
+	return map[string]any{
+		"text":  b.ClipboardText(),
+		"at":    time.Now().Unix(),
+		"image": sum,
+	}
+}
+
+func notePayload(b Backend) map[string]any {
+	text, at := b.Note()
+	return map[string]any{"text": text, "at": at}
+}
+
+// matchETag reports whether an If-None-Match header matches the resource's
+// strong etag. Browsers send the exact etag back, possibly in a list.
+func matchETag(header, etag string) bool {
+	if header == "" {
+		return false
+	}
+	for _, candidate := range strings.Split(header, ",") {
+		if strings.TrimSpace(candidate) == etag {
+			return true
+		}
+	}
+	return false
 }
 
 func httpError(w http.ResponseWriter, code int, msg string) {
@@ -576,39 +864,17 @@ func safeJoin(root, p string) (string, error) {
 	return target, nil
 }
 
-// saveUploads writes uploaded files into dir, never overwriting.
-func saveUploads(form *multipart.Form, dir string) ([]string, error) {
-	var saved []string
-	for _, headers := range form.File {
-		for _, h := range headers {
-			name := sanitiseName(h.Filename)
-			if name == "" {
-				continue
-			}
-			dest := uniquePath(filepath.Join(dir, name))
-			if err := copyUpload(h, dest); err != nil {
-				return saved, err
-			}
-			saved = append(saved, dest)
-		}
-	}
-	return saved, nil
-}
-
-func copyUpload(h *multipart.FileHeader, dest string) error {
-	src, err := h.Open()
-	if err != nil {
-		return err
-	}
-	defer src.Close()
-
+// streamToFile copies one upload part straight to its destination — the
+// whole point of the streaming reader: no temp stage, no second write.
+func streamToFile(src io.Reader, dest string) error {
 	out, err := os.Create(dest)
 	if err != nil {
 		return err
 	}
-	defer out.Close()
-
 	_, err = io.Copy(out, src)
+	if cerr := out.Close(); err == nil {
+		err = cerr
+	}
 	return err
 }
 

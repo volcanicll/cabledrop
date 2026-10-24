@@ -58,7 +58,6 @@ type App struct {
 	dev       model.Device
 	connected bool
 	free      string
-
 	// Last values pushed to the status item. Re-setting the icon every poll
 	// churns AppKit for no reason, so the tray is only touched on a change.
 	traySet  bool
@@ -94,6 +93,22 @@ type App struct {
 	hiddenAt atomic.Int64
 
 	stopWatch chan struct{}
+
+	// subs are the event-stream subscribers (see Subscribe). Three topics —
+	// state, clip, note — because their payloads differ wildly in size: a
+	// full State JSON must not ride along on every clipboard keystroke, and
+	// vice versa. Channels are buffered 1 and sent non-blocking, so a slow or
+	// gone subscriber never slows the app down; the stream coalesces.
+	subMu  sync.Mutex
+	subSeq int
+	subs   map[int]appSub
+}
+
+// appSub is one event-stream client's wake channels.
+type appSub struct {
+	state chan struct{}
+	clip  chan struct{}
+	note  chan struct{}
 }
 
 // Compile-time proof that the app satisfies the HTTP layer's contract.
@@ -111,12 +126,17 @@ const (
 )
 
 func New() *App {
-	return &App{
+	a := &App{
 		clip:      clipboard.New(),
 		serveDir:  defaultServeDir(),
 		transfers: make([]model.Transfer, 0, 8),
 		native:    true,
+		subs:      make(map[int]appSub),
 	}
+	// The event stream pushes clipboard changes to open pages; wire it before
+	// anything can start mirroring.
+	a.clip.SetOnChangeAny(a.notifyClip)
+	return a
 }
 
 // AttachPanel wires the desktop shell's panel in. Both are safe to call with
@@ -174,6 +194,73 @@ func (a *App) Stop() {
 		close(a.stopWatch)
 	}
 	a.StopServing()
+}
+
+// --- change notification (the event stream's source) -----------------------
+
+// Subscribe registers an event-stream client. State/Clip/Note each carry one
+// coalesced signal per change of their topic; Cancel unregisters. The stream
+// handler reads the payload through the ordinary Backend methods, so the
+// snapshots it sends are exactly the ones polling clients would have got.
+func (a *App) Subscribe() serve.Subscriptions {
+	a.subMu.Lock()
+	defer a.subMu.Unlock()
+	id := a.subSeq
+	a.subSeq++
+	s := appSub{
+		state: make(chan struct{}, 1),
+		clip:  make(chan struct{}, 1),
+		note:  make(chan struct{}, 1),
+	}
+	a.subs[id] = s
+	return serve.Subscriptions{
+		State: s.state,
+		Clip:  s.clip,
+		Note:  s.note,
+		Cancel: func() {
+			a.subMu.Lock()
+			delete(a.subs, id)
+			a.subMu.Unlock()
+		},
+	}
+}
+
+// fanOut wakes every subscriber on one topic, dropping signals for anyone
+// whose channel still holds an unread one (they are about to re-read the
+// full state anyway).
+func (a *App) fanOut(wake func(s appSub)) {
+	a.subMu.Lock()
+	defer a.subMu.Unlock()
+	for _, s := range a.subs {
+		wake(s)
+	}
+}
+
+func (a *App) notifyState() {
+	a.fanOut(func(s appSub) { signal(s.state) })
+}
+
+func (a *App) notifyClip() {
+	a.fanOut(func(s appSub) { signal(s.clip) })
+}
+
+func (a *App) notifyNote() {
+	a.fanOut(func(s appSub) { signal(s.note) })
+}
+
+func signal(ch chan struct{}) {
+	select {
+	case ch <- struct{}{}:
+	default:
+	}
+}
+
+// updateClipPolling turns clipboard mirroring on exactly while someone can
+// read it: a phone page over the tunnel (serving), or the panel showing its
+// text view. Idle otherwise — no pbpaste, no osascript, no PowerShell, every
+// second, for nothing.
+func (a *App) updateClipPolling() {
+	a.clip.SetActive(a.Serving() || a.panelVisible())
 }
 
 // fallbackPoll is the watch cadence when the track-devices stream is not
@@ -296,6 +383,9 @@ func (a *App) refresh() {
 	}
 
 	a.syncTray()
+	// Connection, device name, free space or error may all have moved; the
+	// event stream decides whether anyone is listening.
+	a.notifyState()
 }
 
 // Refresh re-detects the device right now. The tray menu and /api/refresh
@@ -420,6 +510,7 @@ func (a *App) showPanel() {
 		return
 	}
 	a.panelUI.Show()
+	a.updateClipPolling()
 }
 
 func (a *App) hidePanel() {
@@ -428,6 +519,7 @@ func (a *App) hidePanel() {
 		return
 	}
 	a.panelUI.Hide()
+	a.updateClipPolling()
 }
 
 // HidePanel is the API-facing form: the page's Escape key lands here.
@@ -522,6 +614,8 @@ func (a *App) StartServing() error {
 			log.Printf("本地服务结束: %v", err)
 		}
 	}()
+	a.updateClipPolling()
+	a.notifyState()
 
 	// Point the device's own loopback at us. A failure here is reported but
 	// doesn't tear the listener down: the panel can still be reached from this
@@ -556,6 +650,8 @@ func (a *App) StopServing() {
 	if port != 0 {
 		device.Default.Run(10*time.Second, "reverse", "--remove", fmt.Sprintf("tcp:%d", port))
 	}
+	a.updateClipPolling()
+	a.notifyState()
 }
 
 func (a *App) setErr(msg string) {
@@ -573,6 +669,7 @@ func (a *App) SetServeDir(dir string) error {
 	a.mu.Lock()
 	a.serveDir = dir
 	a.mu.Unlock()
+	a.notifyState()
 	return nil
 }
 
@@ -600,12 +697,12 @@ func (a *App) addTransfer(name, kind string, size int64) string {
 	if len(a.transfers) > maxTransfers {
 		a.transfers = a.transfers[:maxTransfers]
 	}
+	a.notifyState()
 	return id
 }
 
 func (a *App) finishTransfer(id, state, detail string) {
 	a.mu.Lock()
-	defer a.mu.Unlock()
 	for i := range a.transfers {
 		if a.transfers[i].ID == id {
 			a.transfers[i].State = state
@@ -618,9 +715,11 @@ func (a *App) finishTransfer(id, state, detail string) {
 			if state == "failed" {
 				a.lastErr = detail
 			}
-			return
+			break
 		}
 	}
+	a.mu.Unlock()
+	a.notifyState()
 }
 
 // setTransferPercent records how far a multi-file batch has come. Unknown
@@ -628,15 +727,46 @@ func (a *App) finishTransfer(id, state, detail string) {
 // the row stays indeterminate.
 func (a *App) setTransferPercent(id string, pct float64) {
 	a.mu.Lock()
-	defer a.mu.Unlock()
 	for i := range a.transfers {
 		if a.transfers[i].ID == id {
 			a.transfers[i].Indeterminate = false
 			p := pct
 			a.transfers[i].Percent = &p
+			a.mu.Unlock()
+			a.notifyState()
 			return
 		}
 	}
+	a.mu.Unlock()
+}
+
+// setTransferSize fills in a size learned after the transfer started.
+func (a *App) setTransferSize(id string, size int64) {
+	a.mu.Lock()
+	for i := range a.transfers {
+		if a.transfers[i].ID == id {
+			a.transfers[i].Size = size
+			a.mu.Unlock()
+			a.notifyState()
+			return
+		}
+	}
+	a.mu.Unlock()
+}
+
+// setTransferLocalPath records where a pull landed, for the row's reveal
+// action.
+func (a *App) setTransferLocalPath(id, path string) {
+	a.mu.Lock()
+	for i := range a.transfers {
+		if a.transfers[i].ID == id {
+			a.transfers[i].LocalPath = path
+			a.mu.Unlock()
+			a.notifyState()
+			return
+		}
+	}
+	a.mu.Unlock()
 }
 
 // PushFiles sends local files to the phone, one transfer record each.
@@ -644,10 +774,39 @@ func (a *App) setTransferPercent(id string, pct float64) {
 // A batch of known sizes shares one byte-weighted percentage: each finished
 // file bumps every still-running row by its own share, so the panel shows one
 // honest number for the drag instead of forty separate unknowns.
+//
+// The adb work behind a batch is arranged so the phone pays once, not once
+// per file: the destination is resolved and created a single time, then each
+// file is pushed into the prepared directory. A batch of ten no longer spends
+// its first seconds forking adb thirty times before any byte moves. A single
+// large push additionally samples the device-side file size, turning the
+// indeterminate bar into a real percentage.
 func (a *App) PushFiles(paths []string, destDir string) {
+	// The fake seam keeps the old per-file contract: tests inject a push that
+	// sees the arguments it always did. Production gets the batched shape.
+	prepared := a.pushFile == nil
 	push := a.pushFile
-	if push == nil {
-		push = device.PushFile
+	if prepared {
+		if destDir == "" {
+			destDir = device.DefaultUploadDir()
+		}
+		if err := device.Default.EnsureDir(destDir); err != nil {
+			// The destination is unreachable (device gone, unauthorized) —
+			// one failure for the batch, same shape a failed push makes.
+			for _, p := range paths {
+				id := a.addTransfer(filepath.Base(p), "push", 0)
+				a.finishTransfer(id, "failed", humanTransferError(err.Error()))
+			}
+			return
+		}
+		dir := destDir
+		push = func(local, _ string) (string, error) {
+			return device.Default.PushPrepared(local, dir)
+		}
+		if !strings.HasSuffix(dir, "/") {
+			dir += "/"
+		}
+		destDir = dir
 	}
 
 	total := int64(0)
@@ -682,51 +841,150 @@ func (a *App) PushFiles(paths []string, destDir string) {
 		p := p
 		id := a.addTransfer(filepath.Base(p), "push", sizes[p])
 		ids[p] = id
+		// Single large file: watch it grow on the device so the bar moves.
+		if prepared && len(paths) == 1 && sizes[p] > 0 {
+			stop := make(chan struct{})
+			remote := destDir + filepath.Base(p)
+			go func() {
+				t := time.NewTicker(2 * time.Second)
+				defer t.Stop()
+				for {
+					select {
+					case <-stop:
+						return
+					case <-t.C:
+						if got := device.DeviceFileSize(remote); got > 0 {
+							pct := 100 * float64(got) / float64(sizes[p])
+							if pct > 99 {
+								pct = 99
+							}
+							a.setTransferPercent(id, pct)
+						}
+					}
+				}
+			}()
+			defer close(stop)
+		}
 		go func() {
+			started := time.Now()
 			remote, err := push(p, destDir)
 			if err != nil {
 				a.finishTransfer(id, "failed", humanTransferError(err.Error()))
+				a.notifyTransfer(filepath.Base(p), false)
 				return
 			}
 			bump(p)
 			// The full device path is noise in an 11px line; the folder is
-			// what the user actually wants to know.
-			a.finishTransfer(id, "done", "发送到手机 · "+filepath.Base(filepath.Dir(remote)))
+			// what the user actually wants to know. The measured rate rides
+			// along when the transfer ran long enough for one to be honest.
+			detail := "发送到手机 · " + filepath.Base(filepath.Dir(remote))
+			if rate := humanRate(sizes[p], time.Since(started)); rate != "" {
+				detail += " · " + rate
+			}
+			a.finishTransfer(id, "done", detail)
+			a.notifyTransfer(filepath.Base(p), true)
 		}()
 	}
 }
 
-// PullDeviceFile brings a device file into the shared folder.
-func (a *App) PullDeviceFile(remote string) {
+// PullDeviceFile brings a device file into the shared folder. The expected
+// size, when the caller knows it from the file listing, drives an honest
+// progress bar: adb writes the local file as it goes, so watching it grow
+// costs one os.Stat per second and no adb calls at all.
+func (a *App) PullDeviceFile(remote string, size int64) {
 	pull := a.pullFile
 	if pull == nil {
 		pull = device.PullFile
 	}
-	id := a.addTransfer(baseName(remote), "pull", 0)
+	name := baseName(remote)
+	id := a.addTransfer(name, "pull", size)
+	dest := filepath.Join(a.ServeDir(), name)
+	stop := make(chan struct{})
+	if size > 0 {
+		go func() {
+			t := time.NewTicker(time.Second)
+			defer t.Stop()
+			for {
+				select {
+				case <-stop:
+					return
+				case <-t.C:
+					if fi, err := os.Stat(dest); err == nil && fi.Size() > 0 {
+						pct := 100 * float64(fi.Size()) / float64(size)
+						if pct > 99 {
+							pct = 99
+						}
+						a.setTransferPercent(id, pct)
+					}
+				}
+			}
+		}()
+	}
 	go func() {
+		if size > 0 {
+			defer close(stop)
+		}
+		started := time.Now()
 		local, err := pull(remote, a.ServeDir())
 		if err != nil {
 			a.finishTransfer(id, "failed", humanTransferError(err.Error()))
+			a.notifyTransfer(name, false)
 			return
 		}
 		// The file is now on this machine: its size is knowable even though
 		// adb never reported one, and the history row shows it like a push's.
+		shown := size
 		if fi, statErr := os.Stat(local); statErr == nil {
 			a.setTransferSize(id, fi.Size())
+			shown = fi.Size()
 		}
-		a.finishTransfer(id, "done", "从手机取回 · 共享目录")
+		a.setTransferLocalPath(id, local)
+		detail := "从手机取回 · 共享目录"
+		if rate := humanRate(shown, time.Since(started)); rate != "" {
+			detail += " · " + rate
+		}
+		a.finishTransfer(id, "done", detail)
+		a.notifyTransfer(name, true)
 	}()
 }
 
-// setTransferSize fills in a size learned after the transfer started.
-func (a *App) setTransferSize(id string, size int64) {
-	a.mu.Lock()
-	defer a.mu.Unlock()
-	for i := range a.transfers {
-		if a.transfers[i].ID == id {
-			a.transfers[i].Size = size
-			return
+// humanRate turns bytes and wall time into "12.3 MB/s", but only when the
+// division means something: a transfer that finished in under a second has no
+// rate worth printing, and unknown sizes have none at all.
+func humanRate(size int64, d time.Duration) string {
+	if size <= 0 || d < time.Second {
+		return ""
+	}
+	bps := float64(size) / d.Seconds()
+	for _, u := range []struct {
+		threshold float64
+		name      string
+	}{
+		{1 << 30, "GB/s"}, {1 << 20, "MB/s"}, {1 << 10, "KB/s"},
+	} {
+		if bps >= u.threshold {
+			return fmt.Sprintf("%.1f %s", bps/u.threshold, u.name)
 		}
+	}
+	return fmt.Sprintf("%.0f B/s", bps)
+}
+
+// notifyTransfer raises a system notification for a finished transfer, but
+// only when the panel is not there to show it — the point is that a user who
+// dropped files and switched away still learns the outcome. macOS is where
+// one osascript gets a notification; other platforms stay silent for now.
+func (a *App) notifyTransfer(name string, ok bool) {
+	if a.trayUI == nil || a.panelVisible() || runtime.GOOS != "darwin" {
+		return
+	}
+	what := "已发送到手机"
+	if !ok {
+		what = "传输失败"
+	}
+	script := fmt.Sprintf(`display notification %q with title "CableDrop"`,
+		name+" "+what)
+	if err := exec.Command("osascript", "-e", script).Start(); err != nil {
+		log.Printf("通知失败: %v", err)
 	}
 }
 
@@ -774,7 +1032,6 @@ func baseName(p string) string {
 // ClearTransfers empties the finished history.
 func (a *App) ClearTransfers() {
 	a.mu.Lock()
-	defer a.mu.Unlock()
 	kept := a.transfers[:0]
 	for _, t := range a.transfers {
 		if t.State == "running" {
@@ -782,6 +1039,8 @@ func (a *App) ClearTransfers() {
 		}
 	}
 	a.transfers = kept
+	a.mu.Unlock()
+	a.notifyState()
 }
 
 // --- text handoff --------------------------------------------------------
@@ -792,9 +1051,10 @@ func (a *App) ClearTransfers() {
 // shouldn't overwrite whatever the user has copied right now.
 func (a *App) SetNote(text string) {
 	a.mu.Lock()
-	defer a.mu.Unlock()
 	a.note = text
 	a.noteAt = time.Now().Unix()
+	a.mu.Unlock()
+	a.notifyNote()
 }
 
 func (a *App) Note() (string, int64) {
@@ -834,16 +1094,35 @@ func (a *App) PickDir(prompt string) (string, error) {
 	return picker.PickDir(prompt)
 }
 
-// OpenPath reveals a folder in Finder, Explorer or the desktop's file manager,
-// so the user doesn't have to remember where it is.
+// OpenPath shows a path in Finder, Explorer or the desktop's file manager.
+// A directory opens as-is; a file is revealed — selected inside its folder —
+// which is what the transfer history's "show me the file I just pulled"
+// action wants. The reveal need comes from one click; the shared folder is
+// what the menu and the /api/shared/open endpoint pass, and that stays a
+// plain open.
 func (a *App) OpenPath(path string) {
+	isDir := false
+	if fi, err := os.Stat(path); err == nil {
+		isDir = fi.IsDir()
+	}
 	var cmd *exec.Cmd
 	switch runtime.GOOS {
 	case "darwin":
-		cmd = exec.Command("open", path)
+		if isDir {
+			cmd = exec.Command("open", path)
+		} else {
+			cmd = exec.Command("open", "-R", path)
+		}
 	case "windows":
-		cmd = exec.Command("explorer", path)
+		if isDir {
+			cmd = exec.Command("explorer", path)
+		} else {
+			cmd = exec.Command("explorer", "/select,", path)
+		}
 	default:
+		if !isDir {
+			path = filepath.Dir(path)
+		}
 		cmd = exec.Command("xdg-open", path)
 	}
 	_ = cmd.Start()

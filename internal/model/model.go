@@ -60,6 +60,11 @@ type Transfer struct {
 	// starts (desktop pushes); pulls learn nothing until adb finishes, so
 	// they leave it zero and the UI omits it.
 	Size int64 `json:"size,omitempty"`
+
+	// LocalPath is where a pulled file landed on this machine, set when the
+	// pull completes. The history row's reveal action opens it in the
+	// platform file manager; pushes and uploads leave it empty.
+	LocalPath string `json:"localPath,omitempty"`
 }
 
 // State is everything the UI needs in one payload.

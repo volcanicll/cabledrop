@@ -1,6 +1,9 @@
 package serve_test
 
 import (
+	"bufio"
+	"bytes"
+	"compress/gzip"
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
@@ -13,6 +16,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/volcanicll/cabledrop/internal/model"
 	"github.com/volcanicll/cabledrop/internal/serve"
@@ -42,6 +46,7 @@ type fakeBackend struct {
 	opened     []string
 	hidden     int
 	native     bool
+	subs       []map[string]chan struct{}
 }
 
 func newFakeBackend() *fakeBackend {
@@ -95,7 +100,9 @@ func (f *fakeBackend) CheckDevicePath(path string) error {
 	}
 	return model.ErrBadDevicePath
 }
-func (f *fakeBackend) PullDeviceFile(remote string) { f.pulled = append(f.pulled, remote) }
+func (f *fakeBackend) PullDeviceFile(remote string, size int64) {
+	f.pulled = append(f.pulled, remote)
+}
 func (f *fakeBackend) DeleteDevicePath(remote string) error {
 	f.deleted = append(f.deleted, remote)
 	return nil
@@ -110,6 +117,34 @@ func (f *fakeBackend) PickFiles(prompt string) ([]string, error) {
 func (f *fakeBackend) PickDir(prompt string) (string, error) { return f.pickDir, nil }
 func (f *fakeBackend) OpenPath(path string)                  { f.opened = append(f.opened, path) }
 func (f *fakeBackend) HidePanel()                            { f.hidden++ }
+
+// Subscribe satisfies the event-stream half of the contract. Each
+// subscription's channels are kept so a test can fire them the way the real
+// app fires when its state changes.
+func (f *fakeBackend) Subscribe() serve.Subscriptions {
+	topics := map[string]chan struct{}{
+		"state": make(chan struct{}, 1),
+		"clip":  make(chan struct{}, 1),
+		"note":  make(chan struct{}, 1),
+	}
+	f.subs = append(f.subs, topics)
+	return serve.Subscriptions{
+		State:  topics["state"],
+		Clip:   topics["clip"],
+		Note:   topics["note"],
+		Cancel: func() {},
+	}
+}
+
+// emit fires one signal on the given topic for every live subscription.
+func (f *fakeBackend) emit(topic string) {
+	for _, s := range f.subs {
+		select {
+		case s[topic] <- struct{}{}:
+		default:
+		}
+	}
+}
 
 func TestAPIStateShape(t *testing.T) {
 	b := newFakeBackend()
@@ -396,7 +431,7 @@ func TestNativeOnlyEndpointsRefuseThePhone(t *testing.T) {
 	// forPhone=true gates the backend even though it reports native.
 	h := serve.NewHandler(b, true)
 
-	for _, path := range []string{"/api/pick/files", "/api/pick/dir", "/api/shared/open", "/api/panel/hide"} {
+	for _, path := range []string{"/api/pick/files", "/api/pick/dir", "/api/shared/open", "/api/shared/reveal", "/api/panel/hide"} {
 		rec := httptest.NewRecorder()
 		h.ServeHTTP(rec, httptest.NewRequest("POST", path, strings.NewReader("{}")))
 		if rec.Code != http.StatusNotImplemented {
@@ -588,5 +623,214 @@ func TestServeOnOff(t *testing.T) {
 	h.ServeHTTP(rec, httptest.NewRequest("POST", "/api/serve", strings.NewReader(`{"on":false}`)))
 	if rec.Code != 200 || b.serving {
 		t.Fatalf("serve off = %d serving=%v", rec.Code, b.serving)
+	}
+}
+
+// TestSSEStreamPushesStateClipNote pins the event-stream contract: an
+// opening snapshot of all three topics with no priming fetch, then changes
+// pushed the moment the backend signals them — the shape the phone page's
+// whole rendering path is built on.
+func TestSSEStreamPushesStateClipNote(t *testing.T) {
+	b := newFakeBackend()
+	srv := httptest.NewServer(serve.NewHandler(b, true))
+	defer srv.Close()
+
+	resp, err := http.Get(srv.URL + "/api/events")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer resp.Body.Close()
+	if ct := resp.Header.Get("Content-Type"); !strings.HasPrefix(ct, "text/event-stream") {
+		t.Fatalf("content-type = %q", ct)
+	}
+	br := bufio.NewReader(resp.Body)
+	readEvent := func(want string) string {
+		t.Helper()
+		deadline := time.Now().Add(3 * time.Second)
+		var event, data string
+		for time.Now().Before(deadline) {
+			line, err := br.ReadString('\n')
+			if err != nil {
+				t.Fatalf("stream read: %v", err)
+			}
+			line = strings.TrimRight(line, "\n")
+			if strings.HasPrefix(line, "event: ") {
+				event = strings.TrimPrefix(line, "event: ")
+			}
+			if strings.HasPrefix(line, "data: ") {
+				data = strings.TrimPrefix(line, "data: ")
+			}
+			if line == "" && event != "" {
+				if event != want {
+					t.Fatalf("event = %q, want %q", event, want)
+				}
+				return data
+			}
+		}
+		t.Fatalf("event %q never arrived", want)
+		return ""
+	}
+
+	// Opening snapshot: state, clip, note — in that order.
+	readEvent("state")
+	readEvent("clip")
+	readEvent("note")
+
+	// A backend change is pushed, not polled.
+	b.emit("state")
+	var st model.State
+	if err := json.Unmarshal([]byte(readEvent("state")), &st); err != nil {
+		t.Fatal(err)
+	}
+	if !st.Connected {
+		t.Fatalf("pushed state = %+v", st)
+	}
+
+	b.emit("clip")
+	var clip map[string]any
+	if err := json.Unmarshal([]byte(readEvent("clip")), &clip); err != nil {
+		t.Fatal(err)
+	}
+	if _, ok := clip["image"]; !ok {
+		t.Fatalf("clip event lacks the image fingerprint: %v", clip)
+	}
+
+	// A client that walks away is unsubscribed, not leaked.
+	resp.Body.Close()
+	time.Sleep(50 * time.Millisecond)
+	b.emit("state") // must not panic; the handler has returned
+}
+
+// TestStaticAssetsGetETagGzipAnd304 pins the asset pipeline: gzip when the
+// client accepts it, a strong content-hash etag either way, and a 304 when
+// the etag comes back — the difference between re-downloading the page's
+// scripts every open and re-validating them for free.
+func TestStaticAssetsGetETagGzipAnd304(t *testing.T) {
+	b := newFakeBackend()
+	h := serve.NewHandler(b, true)
+
+	req := httptest.NewRequest("GET", "/js/api.js", nil)
+	req.Header.Set("Accept-Encoding", "gzip")
+	rec := httptest.NewRecorder()
+	h.ServeHTTP(rec, req)
+	if rec.Code != 200 {
+		t.Fatalf("gzip request = %d", rec.Code)
+	}
+	if ce := rec.Header().Get("Content-Encoding"); ce != "gzip" {
+		t.Fatalf("content-encoding = %q", ce)
+	}
+	etag := rec.Header().Get("ETag")
+	if etag == "" {
+		t.Fatal("asset carried no etag")
+	}
+	zr, err := gzip.NewReader(rec.Body)
+	if err != nil {
+		t.Fatalf("body is not gzip: %v", err)
+	}
+	var plain bytes.Buffer
+	io.Copy(&plain, zr)
+	if !strings.Contains(plain.String(), "async function api") {
+		t.Fatalf("gunzipped body is not api.js: %.80q", plain.String())
+	}
+
+	// A matching etag is a 304, gzip accepted or not.
+	req = httptest.NewRequest("GET", "/js/api.js", nil)
+	req.Header.Set("If-None-Match", etag)
+	rec = httptest.NewRecorder()
+	h.ServeHTTP(rec, req)
+	if rec.Code != http.StatusNotModified {
+		t.Fatalf("revalidation = %d, want 304", rec.Code)
+	}
+
+	// Without gzip in Accept-Encoding the plain bytes still arrive.
+	req = httptest.NewRequest("GET", "/js/api.js", nil)
+	rec = httptest.NewRecorder()
+	h.ServeHTTP(rec, req)
+	if rec.Code != 200 || strings.Contains(rec.Header().Get("Content-Encoding"), "gzip") {
+		t.Fatalf("plain request = %d encoding=%q", rec.Code, rec.Header().Get("Content-Encoding"))
+	}
+	if !strings.Contains(rec.Body.String(), "async function api") {
+		t.Fatal("plain body is not api.js")
+	}
+}
+
+func TestClipImageAnswersIfNoneMatchWith304(t *testing.T) {
+	b := newFakeBackend()
+	b.clipImage = []byte("89504E47-fake-png-bytes")
+	h := serve.NewHandler(b, true)
+
+	rec := httptest.NewRecorder()
+	h.ServeHTTP(rec, httptest.NewRequest("GET", "/api/clip/image", nil))
+	if rec.Code != 200 {
+		t.Fatalf("first fetch = %d", rec.Code)
+	}
+	etag := rec.Header().Get("ETag")
+
+	rec = httptest.NewRecorder()
+	req := httptest.NewRequest("GET", "/api/clip/image", nil)
+	req.Header.Set("If-None-Match", etag)
+	h.ServeHTTP(rec, req)
+	if rec.Code != http.StatusNotModified {
+		t.Fatalf("revalidation = %d, want 304", rec.Code)
+	}
+}
+
+func TestRevealEndpointStaysInsideTheSharedRoot(t *testing.T) {
+	dir := t.TempDir()
+	os.WriteFile(filepath.Join(dir, "got.txt"), []byte("x"), 0o644)
+	b := newFakeBackend()
+	b.serveDir = dir
+	h := serve.NewHandler(b, false)
+
+	rec := httptest.NewRecorder()
+	h.ServeHTTP(rec, httptest.NewRequest("POST", "/api/shared/reveal",
+		strings.NewReader(`{"path":"got.txt"}`)))
+	if rec.Code != 200 {
+		t.Fatalf("reveal = %d: %s", rec.Code, rec.Body.String())
+	}
+	if len(b.opened) != 1 || b.opened[0] != filepath.Join(dir, "got.txt") {
+		t.Fatalf("opened = %v", b.opened)
+	}
+
+	// Traversal is refused, and so is a file that is not there.
+	rec = httptest.NewRecorder()
+	h.ServeHTTP(rec, httptest.NewRequest("POST", "/api/shared/reveal",
+		strings.NewReader(`{"path":"../secret"}`)))
+	if rec.Code != http.StatusForbidden {
+		t.Fatalf("traversal = %d, want 403", rec.Code)
+	}
+	rec = httptest.NewRecorder()
+	h.ServeHTTP(rec, httptest.NewRequest("POST", "/api/shared/reveal",
+		strings.NewReader(`{"path":"missing.txt"}`)))
+	if rec.Code != http.StatusNotFound {
+		t.Fatalf("missing file = %d, want 404", rec.Code)
+	}
+}
+
+// TestUploadRejectsAMidStreamTruncation covers the streaming reader's
+// failure path: a body cut off mid-file is an error, and nothing truncated
+// is left behind pretending to be the file.
+func TestUploadRejectsAMidStreamTruncation(t *testing.T) {
+	dir := t.TempDir()
+	b := newFakeBackend()
+	b.serveDir = dir
+	h := serve.NewHandler(b, false)
+
+	var buf strings.Builder
+	w := multipart.NewWriter(&buf)
+	part, _ := w.CreateFormFile("files", "cut.txt")
+	part.Write([]byte(strings.Repeat("payload-", 400)))
+	w.Close()
+	body := buf.String()[:buf.Len()-30] // cut into the file's own bytes
+
+	rec := httptest.NewRecorder()
+	req := httptest.NewRequest("POST", "/upload", strings.NewReader(body))
+	req.Header.Set("Content-Type", w.FormDataContentType())
+	h.ServeHTTP(rec, req)
+	if rec.Code != http.StatusBadRequest && rec.Code != http.StatusInternalServerError {
+		t.Fatalf("truncated upload = %d, want 400/500", rec.Code)
+	}
+	if _, err := os.Stat(filepath.Join(dir, "cut.txt")); !os.IsNotExist(err) {
+		t.Fatalf("a truncated file was left behind: %v", err)
 	}
 }
