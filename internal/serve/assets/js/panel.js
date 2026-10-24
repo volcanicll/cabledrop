@@ -34,6 +34,23 @@ function fmtFree(s) {
   return m[1] + ' ' + unit;
 }
 
+// One feedback surface for action failures — the same words alert() used to
+// show, but inside the panel's own visual language instead of a system
+// dialog that steals focus.
+let toastTimer = null;
+
+function toast(msg) {
+  const el = $('toast');
+  el.textContent = msg;
+  el.hidden = false;
+  requestAnimationFrame(() => el.classList.add('show'));
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => {
+    el.classList.remove('show');
+    setTimeout(() => { el.hidden = true; }, 220);
+  }, 2600);
+}
+
 function relTime(at) {
   if (!at) return '';
   const s = Math.max(0, Date.now() / 1000 - at);
@@ -63,7 +80,10 @@ function render(s) {
   St = s;
   if (first) {
     document.body.classList.remove('is-loading');
-    $('skeleton').remove();
+    // A boot that failed before this may already have retired the skeleton
+    // for the failure card; nothing to remove then.
+    const sk = $('skeleton');
+    if (sk) sk.remove();
   }
 
   // top bar — the phone's real name is the headline; the serial never is.
@@ -194,7 +214,7 @@ function relTimeKey(at) {
 function txSig(tr) {
   return [tr.state, tr.detail || '', tr.percent ?? '', tr.indeterminate ? 1 : 0,
           tr.indeterminate ? elapsedText(tr.startedAt) : '', tr.size ?? '',
-          relTimeKey(tr.at)].join('|');
+          tr.localPath || '', relTimeKey(tr.at)].join('|');
 }
 
 function renderTransfers(tx, cap) {
@@ -322,6 +342,21 @@ function patchTxRow(el, tr) {
   } else if (tr.state === 'failed') {
     state.innerHTML = `<span class="badge failed"><span class="b-dot"><svg class="ic"><use href="#i-alert"/></svg></span>${esc(t('panel.tx.failed'))}</span>`;
   }
+
+  // A completed pull knows where its file landed: the row gains a reveal
+  // action, so "show me what I just received" is one click, not a Finder
+  // hunt through the shared folder.
+  const reveal = el.querySelector('.tx-reveal');
+  if (reveal) reveal.remove();
+  if (tr.state === 'done' && tr.kind === 'pull' && tr.localPath) {
+    const btn = document.createElement('button');
+    btn.className = 'icon-btn tx-reveal';
+    btn.dataset.reveal = tr.localPath;
+    btn.title = t('panel.tx.reveal');
+    btn.setAttribute('aria-label', t('panel.tx.reveal'));
+    btn.innerHTML = `<svg class="ic sm-ic"><use href="#i-reveal"/></svg>`;
+    el.insertBefore(btn, el.querySelector('.tx-chev'));
+  }
 }
 
 /* ---------------- polling ---------------- */
@@ -333,11 +368,82 @@ async function poll(force) {
     render(await api('/api/state'));
   } catch (e) {
     // A failed poll usually means the process is going away; keep the last
-    // good render on screen rather than blanking the panel.
+    // good render on screen rather than blanking the panel. But a boot that
+    // never reached its first state must not sit on an endless 「正在检测」
+    // over a half-dressed page — retire the skeleton and say what is wrong.
+    if (St === null) showBootFailure();
   } finally {
     busy = false;
   }
 }
+
+// The boot-failure card: the page loaded but no state ever arrived — the
+// process is gone, or the page was opened somewhere the API does not answer
+// (a file:// preview, a stale tab). The header stops claiming to detect, the
+// tiles stop promising to work, and the card carries the retry every error
+// card here has.
+function showBootFailure() {
+  document.body.classList.remove('is-loading');
+  const sk = $('skeleton');
+  if (sk) sk.remove();
+
+  const name = $('devName');
+  name.textContent = t('panel.dev.disconnected');
+  name.classList.add('off');
+  renderSub(null);
+  $('tFiles').disabled = true;
+  $('tSend').disabled = true;
+  $('tText').setAttribute('aria-disabled', 'true');
+  $('tServe').setAttribute('aria-disabled', 'true');
+
+  const box = $('errorBox');
+  box.hidden = false;
+  // Same shape renderError builds: first line is the headline, the rest is
+  // the smaller detail — the \n in the string must survive the trip.
+  const lines = t('panel.error.noBackend').split('\n');
+  const detail = lines.length > 1
+    ? `<span class="error-detail">${esc(lines.slice(1).join('\n'))}</span>` : '';
+  box.innerHTML = `<div class="error-card" role="alert">
+    <svg class="ic"><use href="#i-alert"/></svg>
+    <span class="error-body">${esc(lines[0])}${detail}</span>
+    <button class="btn sm ghost" id="bootRetry">${esc(t('common.retry'))}</button>
+  </div>`;
+  $('bootRetry').onclick = () => {
+    box.hidden = true;
+    box.innerHTML = '';
+    poll(true);
+  };
+}
+
+// Polling runs only while the panel can be seen: the native shell tells the
+// page on every show and hide (ui.go wires the window events to a
+// cable-drop-panel CustomEvent), and a hidden panel has nobody to render to.
+// Timers in a hidden WebView still wake the web content process, so letting
+// them run for nothing was pure battery spend. The default is on: a browser
+// tab used for development never receives the native event.
+let panelShown = true;
+let pollTimer = null;
+let clipTimer = null;
+
+function setPanelTimers(on) {
+  if (on && pollTimer == null) {
+    pollTimer = setInterval(poll, 2000);
+    clipTimer = setInterval(() => { if (view === 'text') refreshClip(); }, 2000);
+  }
+  if (!on && pollTimer != null) {
+    clearInterval(pollTimer);
+    clearInterval(clipTimer);
+    pollTimer = null;
+    clipTimer = null;
+  }
+}
+
+addEventListener('cable-drop-panel', (ev) => {
+  panelShown = !!(ev.detail && ev.detail.shown);
+  setPanelTimers(panelShown);
+  // Opening the panel must show now-state, not whatever the last tick saw.
+  if (panelShown) poll(true);
+});
 
 /* ---------------- device files ---------------- */
 
@@ -402,7 +508,7 @@ const hidePanel = () => { post('/api/panel/hide').catch(() => { }); };
 $('panelClose').onclick = hidePanel;
 
 $('openDir').onclick = async () => {
-  try { await post('/api/shared/open'); } catch (e) { alert(e.message); }
+  try { await post('/api/shared/open'); } catch (e) { toast(e.message); }
 };
 
 $('refresh').onclick = async (ev) => {
@@ -421,7 +527,7 @@ $('tSend').onclick = async () => {
       await post('/api/send', { paths: picked.paths });
       poll(true);
     }
-  } catch (e) { alert(e.message); }
+  } catch (e) { toast(e.message); }
 };
 
 // The two div-tiles: same activation surface as a button, because they carry
@@ -446,7 +552,7 @@ wireTile($('tText'), () => { show('text'); refreshClip(); });
 wireTile($('tServe'), async () => {
   try {
     render(await post('/api/serve', { on: !(St && St.serving) }));
-  } catch (e) { alert(e.message); }
+  } catch (e) { toast(e.message); }
 });
 
 $('copyURL').onclick = async (ev) => {
@@ -463,7 +569,7 @@ $('changeDir').onclick = async () => {
   try {
     const picked = await post('/api/pick/dir');
     if (picked.path) render(await post('/api/shared/dir', { dir: picked.path }));
-  } catch (e) { alert(e.message); }
+  } catch (e) { toast(e.message); }
 };
 
 $('clearTx').onclick = async () => { render(await post('/api/transfers/clear')); };
@@ -474,8 +580,17 @@ $('toggleTx').onclick = () => {
 };
 
 // A row is a disclosure: the chevron points at the one thing the panel had
-// to hide — the tail of a long name or a failure detail.
-$('txCard').addEventListener('click', (ev) => {
+// to hide — the tail of a long name or a failure detail. The reveal button,
+// when the row carries one, opens the pulled file instead of toggling.
+$('txCard').addEventListener('click', async (ev) => {
+  const reveal = ev.target.closest('[data-reveal]');
+  if (reveal) {
+    ev.stopPropagation();
+    try {
+      await post('/api/shared/reveal', { path: reveal.dataset.reveal });
+    } catch (e) { toast(e.message); }
+    return;
+  }
   const row = ev.target.closest('.tx');
   if (row) row.classList.toggle('open');
 });
@@ -492,7 +607,7 @@ $('filesList').onclick = async (ev) => {
     try {
       await post('/api/device/delete', { path: p });
       loadFiles(curDir);
-    } catch (e) { alert(e.message); }
+    } catch (e) { toast(e.message); }
     return;
   }
   const row = ev.target.closest('.row[data-path]');
@@ -599,5 +714,4 @@ i18nOnChange(() => {
 
 renderSub(null);
 poll(true);
-setInterval(poll, 2000);
-setInterval(() => { if (view === 'text') refreshClip(); }, 2000);
+setPanelTimers(true);

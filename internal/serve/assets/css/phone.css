@@ -261,10 +261,25 @@ body.phone .hint { font-size: var(--fs-sm); }
   cursor: pointer;
 }
 
-.p-progress { height: 5px; border-radius: 3px; background: var(--surface-2);
-              overflow: hidden; margin-top: var(--s-2); }
-.p-progress > div { height: 100%; width: 0; background: var(--accent);
-                    transition: width var(--t-fast) linear; }
+/* Per-file upload rows: each picked file owns its bar and its outcome, so a
+   failure marks one file instead of the whole batch. Spacing is margins, not
+   flex gap — engines below Chrome 76 parse gap and then ignore it. */
+.p-uplist { margin-top: var(--s-2); }
+.up-row { display: flex; align-items: center;
+          font-size: var(--fs-sm); color: var(--text-2); }
+.up-row + .up-row { margin-top: 6px; }
+.up-row .ic { flex: 0 0 auto; width: 15px; height: 15px; margin-right: 8px; }
+.up-row.running .ic { color: var(--text-3); }
+.up-row.done .ic { color: var(--ok); }
+.up-row.failed .ic { color: var(--danger); }
+.up-name { flex: 1 1 auto; min-width: 0; margin-right: 8px; overflow: hidden;
+           white-space: nowrap; text-overflow: ellipsis; }
+.up-bar { flex: 0 0 72px; height: 5px; border-radius: 3px;
+          background: var(--surface-2); overflow: hidden; }
+.up-bar i { display: block; height: 100%; width: 0;
+            background: var(--accent); transition: width var(--t-fast) linear; }
+.up-row.done .up-bar i { background: var(--ok); }
+.up-row.failed .up-bar i { background: var(--danger); }
 
 /* ---------- file list ---------- */
 

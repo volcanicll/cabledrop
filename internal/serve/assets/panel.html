@@ -33,6 +33,7 @@
   <symbol id="i-clip" viewBox="0 0 24 24"><rect x="8" y="3.5" width="8" height="4" rx="1.4"/><path d="M16 5.5h1.6A1.9 1.9 0 0 1 19.5 7.4v11.2a1.9 1.9 0 0 1-1.9 1.9H6.4a1.9 1.9 0 0 1-1.9-1.9V7.4A1.9 1.9 0 0 1 6.4 5.5H8"/></symbol>
   <symbol id="i-check" viewBox="0 0 24 24"><path d="M4.5 12.5 10 18l9.5-11"/></symbol>
   <symbol id="i-trash" viewBox="0 0 24 24"><path d="M4.5 7h15"/><path d="M9.5 7V5.2A1.2 1.2 0 0 1 10.7 4h2.6a1.2 1.2 0 0 1 1.2 1.2V7"/><path d="M6.5 7l.8 12a1.6 1.6 0 0 0 1.6 1.5h6.2a1.6 1.6 0 0 0 1.6-1.5L17.5 7"/></symbol>
+  <symbol id="i-reveal" viewBox="0 0 24 24"><path d="M9.5 14.5 20 4"/><path d="M14 4h6v6"/><path d="M20 13.5V19a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V7a2 2 0 0 1 2-2h5.5"/></symbol>
 </svg>
 
 <div class="wrap">
@@ -204,6 +205,10 @@
     </section>
 
   </div>
+
+  <!-- One feedback surface for errors that used to be alert() dialogs: same
+       words, but inside the panel's own visual language. -->
+  <div class="toast" id="toast" role="status" hidden></div>
 
   <footer class="trust">
     <span class="trust-left">

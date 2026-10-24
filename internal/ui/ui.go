@@ -150,6 +150,25 @@ func Run(opts Options) error {
 	panel.OnWindowEvent(events.Windows.WindowKillFocus, dismissOnBlur)
 	panel.OnWindowEvent(events.Linux.WindowFocusOut, dismissOnBlur)
 
+	// Tell the page when it can be seen. The panel polls for state while
+	// visible and stops while hidden — timers in a hidden WebView still wake
+	// the web content process, and there is nobody to render to. The page
+	// also polls once the moment it becomes visible, so opening the panel
+	// shows now-state, not the last tick before it was hidden.
+	panelVisibilityToPage := func(shown bool) {
+		js := "window.dispatchEvent(new CustomEvent('cable-drop-panel',{detail:{shown:false}}))"
+		if shown {
+			js = "window.dispatchEvent(new CustomEvent('cable-drop-panel',{detail:{shown:true}}))"
+		}
+		panel.ExecJS(js)
+	}
+	panel.OnWindowEvent(events.Common.WindowShow, func(*application.WindowEvent) {
+		panelVisibilityToPage(true)
+	})
+	panel.OnWindowEvent(events.Common.WindowHide, func(*application.WindowEvent) {
+		panelVisibilityToPage(false)
+	})
+
 	// Hand the native surfaces to the app before it starts: the device watcher
 	// touches the tray on its very first tick.
 	opts.Controller.AttachPanel(&panelWindow{w: panel, tray: tray})

@@ -47,7 +47,7 @@ async function copyText(text) {
   toast(ok ? t('phone.toast.copied') : t('phone.toast.copyFailed'));
 }
 
-/* ---------------- polling ---------------- */
+/* ---------------- state, via the event stream ---------------- */
 
 let lastNoteAt = 0;
 let lastClip = '';
@@ -56,43 +56,112 @@ let imageBlob = null;
 let imageUrl = '';
 let online = null;
 
-async function refresh() {
+// The three appliers below are the whole render surface: both the event
+// stream and the polling fallback feed them, so what a page shows never
+// depends on how the data arrived.
+
+function applyState(st) {
+  if (!st) return;
+  setOnline(true);
+  $('sub').textContent = st.device
+    ? t('phone.conn.connectedDevice', { device: st.device })
+    : t('phone.conn.ready');
+}
+
+function applyClip(clip) {
+  const clipText = clip.text || '';
+  if (clipText !== lastClip) {
+    lastClip = clipText;
+    $('clipText').textContent = clipText || t('common.empty');
+  }
+  // The clipboard's image, signalled by a fingerprint so the bytes are only
+  // fetched when the picture actually changed.
+  syncClipImage(clip.image || '');
+}
+
+function applyNote(note) {
+  // A note only steals attention when it is new, so scrolling back to a
+  // previously read note isn't fought by the stream.
+  const noteText = note.text || '';
+  if (noteText && note.at !== lastNoteAt) {
+    lastNoteAt = note.at;
+    $('noteCard').hidden = false;
+    $('noteText').textContent = noteText;
+  }
+  if (!noteText) $('noteCard').hidden = true;
+}
+
+// Polling fallback: the same three payloads the events carry, fetched on a
+// timer. It only runs after the stream itself failed — an engine without
+// EventSource, or a tunnel that keeps dropping it.
+let pollTimer = null;
+
+async function pollOnce() {
   try {
     const [st, clip, note] = await Promise.all([
       api('/api/state').catch(() => null),
       api('/api/clip'),
       api('/api/note'),
     ]);
-
-    setOnline(true);
-    $('sub').textContent = st && st.device
-      ? t('phone.conn.connectedDevice', { device: st.device })
-      : t('phone.conn.ready');
-
-    // Clipboard
-    const clipText = clip.text || '';
-    if (clipText !== lastClip) {
-      lastClip = clipText;
-      $('clipText').textContent = clipText || t('common.empty');
-    }
-
-    // The clipboard's image, signalled by a fingerprint on /api/clip so the
-    // bytes are only fetched when the picture actually changed.
-    await syncClipImage(clip.image || '');
-
-    // A note only steals attention when it is new, so scrolling back to a
-    // previously read note isn't fought by the poll.
-    const noteText = note.text || '';
-    if (noteText && note.at !== lastNoteAt) {
-      lastNoteAt = note.at;
-      $('noteCard').hidden = false;
-      $('noteText').textContent = noteText;
-    }
-    if (!noteText) $('noteCard').hidden = true;
+    applyState(st);
+    applyClip(clip);
+    applyNote(note);
   } catch (e) {
     setOnline(false);
   }
 }
+
+function startPollingFallback() {
+  if (pollTimer) return;
+  pollTimer = setInterval(pollOnce, 2500);
+}
+
+function stopPollingFallback() {
+  if (pollTimer) {
+    clearInterval(pollTimer);
+    pollTimer = null;
+  }
+}
+
+let events = null;
+
+function startEvents() {
+  if (!window.EventSource) { startPollingFallback(); return; }
+  events = new EventSource('/api/events');
+  events.addEventListener('state', (ev) => {
+    stopPollingFallback();
+    try { applyState(JSON.parse(ev.data)); } catch (_) { }
+  });
+  events.addEventListener('clip', (ev) => {
+    try { applyClip(JSON.parse(ev.data)); } catch (_) { }
+  });
+  events.addEventListener('note', (ev) => {
+    try { applyNote(JSON.parse(ev.data)); } catch (_) { }
+  });
+  events.onerror = () => {
+    // The tunnel dropped or the process is gone. Show offline, fall back to
+    // polling until either the stream's own reconnect succeeds or a poll
+    // proves the link dead; startEvents is revisited on visibility.
+    setOnline(false);
+    events.close();
+    events = null;
+    startPollingFallback();
+  };
+}
+
+// Coming back to the foreground must show now-state: while hidden, an engine
+// may throttle or suspend timers, and the fallback interval may have missed
+// ticks. This is also the moment to give the event stream another chance —
+// a re-plugged cable brings the tunnel back, and a stream that works again
+// retires the polling fallback on its first event.
+document.addEventListener('visibilitychange', () => {
+  if (document.hidden) return;
+  if (events == null) {
+    startEvents();
+    pollOnce();
+  }
+  loadFiles(curSub);
+});
 
 // Swaps the clipboard card between text and picture. The text card stays for
 // anything typed or copied as text — the page reads exactly as before when the
@@ -211,9 +280,10 @@ $('filesUp').onclick = () => {
   loadFiles(parts.join('/'));
 };
 
-/* ---------------- upload ---------------- */
+/* ---------------- upload, one file at a time ---------------- */
 
 let chosen = [];
+let uploading = false;
 
 // Whatever the picker holds, the pick line and the button say the same thing.
 // Shared by the picker, the end of an upload and the language switch, which
@@ -225,72 +295,122 @@ function syncUploadUI() {
   $('upload').textContent = chosen.length
     ? t('phone.upload.sendCount', { n: chosen.length })
     : t('phone.upload.send');
+  $('upload').disabled = chosen.length === 0 || uploading;
 }
 
 $('fileInput').onchange = (e) => {
   chosen = Array.from(e.target.files || []);
   syncUploadUI();
-  $('upload').disabled = chosen.length === 0;
 };
 
-$('upload').onclick = () => {
-  if (!chosen.length) return;
+// Each picked file gets its own row: name, its own bar, its own outcome. One
+// giant request could only show one blended percentage and made every file
+// share one failure — a flaky mid-batch drop lost everything with it.
+function renderUploadList(rows) {
+  const list = $('upList');
+  if (!rows.length) {
+    list.hidden = true;
+    list.innerHTML = '';
+    return;
+  }
+  list.hidden = false;
+  list.innerHTML = rows.map((r) => {
+    const state = r.ok === true ? 'done'
+      : r.ok === false ? 'failed'
+      : 'running';
+    const pct = r.ok === true ? 100 : r.pct;
+    const icon = r.ok === true ? 'i-check'
+      : r.ok === false ? 'i-alert' : 'i-up';
+    const title = r.ok === false ? ` title="${esc(r.error || '')}"` : '';
+    return `<div class="up-row ${state}"${title}>
+      <svg class="ic sm-ic"><use href="#${icon}"/></svg>
+      <span class="up-name">${esc(r.name)}</span>
+      <span class="up-bar"><i style="width:${Math.max(3, Math.min(100, pct))}%"></i></span>
+    </div>`;
+  }).join('');
+}
 
-  const fd = new FormData();
-  chosen.forEach((f) => fd.append('files', f, f.name));
+// Uploads one file, resolving when it lands and rejecting with the server's
+// own words when it does not.
+function uploadOne(file, onProgress) {
+  return new Promise((resolve, reject) => {
+    const fd = new FormData();
+    fd.append('files', file, file.name);
 
-  const xhr = new XMLHttpRequest();
-  xhr.open('POST', '/upload');
-  $('upProgress').hidden = false;
-  $('upload').disabled = true;
-  // Everything the user picked is gone from the form by the time the UI
-  // resets, whether the upload made it or not — a stale "3 files chosen"
-  // would point at files the server never received.
-  const reset = () => {
-    chosen = [];
-    $('fileInput').value = '';
-    $('upProgress').hidden = true;
-    $('upBar').style.width = '0%';
-    syncUploadUI();
-    $('upload').disabled = false;
-  };
-
-  xhr.upload.onprogress = (ev) => {
-    if (!ev.lengthComputable) return;
-    const pct = Math.round((ev.loaded / ev.total) * 100);
-    $('upBar').style.width = pct + '%';
-    $('upload').textContent = t('phone.upload.progress', { pct });
-  };
-
-  xhr.onload = () => {
-    reset();
-    if (xhr.status === 200) {
-      toast(t('phone.toast.uploaded'));
-      loadFiles(curSub);
-    } else {
-      // The server answers failures with a JSON error body: surface it, never
-      // a bare "upload failed" that hides whether it was a bad request or a
-      // full disk.
+    const xhr = new XMLHttpRequest();
+    xhr.open('POST', '/upload');
+    xhr.upload.onprogress = (ev) => {
+      if (ev.lengthComputable) onProgress(Math.round((ev.loaded / ev.total) * 100));
+    };
+    xhr.onload = () => {
+      if (xhr.status === 200) { resolve(); return; }
+      // The server answers failures with a JSON error body: surface it,
+      // never a bare "upload failed" that hides whether it was a bad request
+      // or a full disk.
       let msg = t('phone.toast.uploadFailed', { code: xhr.status });
       try { msg = JSON.parse(xhr.responseText).error || msg; } catch (_) { }
-      toast(msg);
+      reject(msg);
+    };
+    // A network-level failure never gets an HTTP status. Over adb reverse
+    // that means either the cable/tunnel dropped, or the phone failed to
+    // read the file's contents — naming both beats a bare "failed".
+    const streamDied = () => reject(t('phone.toast.streamDied'));
+    xhr.upload.onerror = streamDied;
+    xhr.onerror = streamDied;
+    xhr.send(fd);
+  });
+}
+
+$('upload').onclick = async () => {
+  if (!chosen.length || uploading) return;
+  uploading = true;
+  syncUploadUI();
+
+  const rows = chosen.map((f) => ({ name: f.name, pct: 0, ok: null }));
+  renderUploadList(rows);
+
+  let okCount = 0;
+  let failCount = 0;
+  // Sequential, not parallel: the USB link is one pipe anyway, and going one
+  // by one is what makes each row's percentage its own truth. Progress
+  // arrives per network chunk, but the row only repaints when its integer
+  // percentage moved — a 2 GB file must not cost ten thousand rebuilds.
+  for (let i = 0; i < chosen.length; i++) {
+    try {
+      await uploadOne(chosen[i], (pct) => {
+        if (pct === rows[i].pct) return;
+        rows[i].pct = pct;
+        renderUploadList(rows);
+      });
+      rows[i].ok = true;
+      okCount++;
+    } catch (msg) {
+      rows[i].ok = false;
+      rows[i].error = msg;
+      failCount++;
     }
-  };
+    renderUploadList(rows);
+  }
 
-  // A network-level failure never gets an HTTP status. Over adb reverse that
-  // means either the cable/tunnel dropped, or the phone failed to read the
-  // chosen file's contents — naming both beats a bare "failed".
-  const streamDied = () => {
-    const n = chosen.length;
-    reset();
-    console.error('upload aborted: readyState=%d status=%d files=%d',
-      xhr.readyState, xhr.status, n);
-    toast(t('phone.toast.streamDied'));
-  };
-  xhr.upload.onerror = streamDied;
-  xhr.onerror = streamDied;
+  // Everything the user picked is gone from the form by the time the UI
+  // resets, whether the uploads made it or not — a stale "3 files chosen"
+  // would point at files the server never received.
+  chosen = [];
+  $('fileInput').value = '';
+  uploading = false;
+  syncUploadUI();
+  // Leave the outcome on screen a beat before rolling the list up.
+  setTimeout(() => { if (!uploading) renderUploadList([]); }, 4000);
 
-  xhr.send(fd);
+  if (failCount === 0) {
+    toast(t('phone.toast.uploaded'));
+    loadFiles(curSub);
+  } else if (okCount > 0) {
+    toast(t('phone.upload.mixed', { ok: okCount, fail: failCount }));
+    loadFiles(curSub);
+  } else {
+    toast(rows.find((r) => r.ok === false).error || t('phone.toast.streamDied'));
+  }
 };
 
 /* ---------------- copy / share the clipboard image ---------------- */
@@ -387,9 +507,9 @@ $('sendMac').onclick = async () => {
   }
 };
 
-$('reload').onclick = () => { loadFiles(curSub); refresh(); };
+$('reload').onclick = () => { loadFiles(curSub); pollOnce(); };
 
-$('retryConn').onclick = () => { refresh(); loadFiles(curSub); };
+$('retryConn').onclick = () => { pollOnce(); loadFiles(curSub); };
 
 /* ---------------- language ---------------- */
 
@@ -400,11 +520,12 @@ i18nOnChange(() => {
   if (!lastClip) $('clipText').textContent = t('common.empty');
   syncUploadUI();
   loadFiles(curSub);
-  refresh();
+  pollOnce();
 });
 
 /* ---------------- boot ---------------- */
 
-refresh();
+startEvents();
+pollOnce();
 loadFiles('');
 setInterval(refresh, 2500);

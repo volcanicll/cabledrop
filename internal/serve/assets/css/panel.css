@@ -69,6 +69,12 @@
 .skel-row { height: 62px; border-radius: var(--r-lg); }
 .skel-row.wide { margin-top: var(--s-3); }
 
+/* Until the first state render lands, the skeleton stands in for the whole
+   page: the real views stay out of layout, so the loading state can never
+   dissolve into "skeleton on top, dressed page below" — the half-built look
+   a page shows when its first /api/state never comes back. */
+body.is-loading .view { display: none; }
+
 /* ---------- error card ---------- */
 
 .error-card {
@@ -450,3 +456,41 @@ html.native-glass .note-box {
 html.native-glass .trust {
   background: color-mix(in srgb, var(--ok) 7%, transparent);
 }
+
+/* ---------- toast ---------- */
+
+/* Feedback for action failures, where alert() dialogs used to be: same
+   placement as the phone page's toast, inside the panel's own chrome. */
+.toast {
+  position: fixed;
+  left: 50%;
+  bottom: 52px;
+  transform: translateX(-50%) translateY(8px);
+  max-width: 82%;
+  padding: 9px 16px;
+  border-radius: 10px;
+  background: var(--surface-2);
+  color: var(--text);
+  border: 1px solid var(--border);
+  box-shadow: 0 6px 24px rgba(0, 0, 0, 0.18);
+  font-size: var(--fs-sm);
+  text-align: center;
+  opacity: 0;
+  transition: opacity 0.18s ease, transform 0.18s ease;
+  pointer-events: none;
+  z-index: 30;
+}
+.toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
+
+/* ---------- transfer row: reveal ---------- */
+
+/* The reveal action on a completed pull row sits beside the chevron and
+   keeps the row's own hit target intact. */
+.tx-reveal {
+  flex: 0 0 auto;
+  width: 26px;
+  height: 26px;
+  color: var(--text-3);
+}
+.tx-reveal .ic { width: 13px; height: 13px; }
+.tx-reveal:hover { color: var(--accent-text); }
