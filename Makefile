@@ -17,10 +17,11 @@ LDFLAGS  = -s -w -X main.version=$(VERSION)
 VCS      = -buildvcs=false
 TAGS     = production
 
-# macOS 12 is the floor for the Go toolchain; Info.plist says the same.
+# macOS 13 is the floor the Go 1.27 toolchain actually targets; Info.plist
+# says the same. Declaring 12.0 only earned a linker warning.
 ifeq ($(shell uname -s),Darwin)
-  export CGO_CFLAGS  = -mmacosx-version-min=12.0
-  export CGO_LDFLAGS = -mmacosx-version-min=12.0
+  export CGO_CFLAGS  = -mmacosx-version-min=13.0
+  export CGO_LDFLAGS = -mmacosx-version-min=13.0
   # Wails' private AppKit APIs: transparent webview + custom corner radius,
   # so the panel can draw a tint over native vibrancy. Builds without the
   # tag stay opaque and look as before.
@@ -66,7 +67,7 @@ app: build icons
 ## The Wails macOS backend is cgo, so each slice is a real native compile with
 ## clang told which architecture to target — setting GOARCH alone gets you a
 ## linker error, not a fat binary.
-DARWIN_MIN = -mmacosx-version-min=12.0
+DARWIN_MIN = -mmacosx-version-min=13.0
 app-arch: icons
 	@rm -rf build/darwin/$(APPNAME)-*.app
 	@for arch in arm64 amd64; do \

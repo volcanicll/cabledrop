@@ -13,6 +13,9 @@ All notable changes to CableDrop are documented here. The format follows
   drops from 22.5 MB to 11/12 MB and the download from 9.8 MB to 3.4/4.0 MB.
   `make dmg-universal` still builds the fat app and dmg for anyone who wants
   a single file.
+- The macOS floor is now 13.0, which is what the Go 1.27 toolchain targets.
+  The previous 12.0 declaration could not be honoured: the link step warned
+  that the runtime objects were built for 13.0.
 
 ## 0.0.4 - 2026-10-25
 

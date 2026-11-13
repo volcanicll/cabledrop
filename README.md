@@ -192,7 +192,7 @@ a counterpart in the other language pointing at a file that exists, and each
 
 ## Status & compatibility
 
-- macOS 12+ (arm64 / amd64), Windows 10+ (amd64/arm64), Linux with GTK3 + WebKitGTK 4.1, Android 7.0+ (APK, minSdk 24).
+- macOS 13+ (arm64 / amd64), Windows 10+ (amd64/arm64), Linux with GTK3 + WebKitGTK 4.1, Android 7.0+ (APK, minSdk 24).
 - Tested against `adb` from current Platform Tools; very old adb falls back to polling.
 
 ## Contributing

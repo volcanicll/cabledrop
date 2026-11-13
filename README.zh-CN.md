@@ -113,7 +113,7 @@ android/            可选 APK 壳(纯平台 API)
 
 ## 状态与兼容
 
-- macOS 12+(arm64 / amd64)、Windows 10+(amd64/arm64)、Linux(GTK3 + WebKitGTK 4.1)、Android 7.0+(APK)。
+- macOS 13+(arm64 / amd64)、Windows 10+(amd64/arm64)、Linux(GTK3 + WebKitGTK 4.1)、Android 7.0+(APK)。
 - 按当前 Platform Tools 的 adb 测试;过旧的 adb 会自动回退到低频轮询。
 
 ## 参与开发

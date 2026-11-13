@@ -32,7 +32,7 @@
       'hero.ctaMac': '下载 macOS 版（Apple 芯片）',
       'hero.ctaAll': '所有平台',
       'hero.ctaSource': '查看源码',
-      'hero.note': 'MIT 许可 · macOS 12+、Windows 10+、Linux（GTK3）· 安卓 7+',
+      'hero.note': 'MIT 许可 · macOS 13+、Windows 10+、Linux（GTK3）· 安卓 7+',
 
       'pillar.files.title': '文件双向传',
       'pillar.files.body': '拖到面板上，或选择文件发送。浏览手机存储，把任何东西拉回来。',
@@ -156,7 +156,7 @@
       'hero.ctaMac': 'Download for macOS (Apple silicon)',
       'hero.ctaAll': 'All platforms',
       'hero.ctaSource': 'View source',
-      'hero.note': 'MIT licensed · macOS 12+, Windows 10+, Linux (GTK3) · Android 7+',
+      'hero.note': 'MIT licensed · macOS 13+, Windows 10+, Linux (GTK3) · Android 7+',
 
       'pillar.files.title': 'Files, both directions',
       'pillar.files.body': "Drag onto the panel or pick files to send. Browse the phone's storage and pull anything back.",
