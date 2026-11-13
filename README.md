@@ -104,7 +104,8 @@ make apk        # → dist/CableDrop.apk   (minSdk 24, targetSdk 36)
 ## Building a release
 
 ```bash
-make dmg            # universal macOS .app (amd64 + arm64) and a .dmg
+make dmg            # two macOS .app/.dmg builds: arm64 and amd64
+make dmg-universal  # the same as one fat .app/.dmg (both slices in one file)
 make windows        # both Windows architectures, cross-compiled from macOS
 make linux          # native Linux binary — needs GTK 3 and WebKitGTK 4.1
 make apk            # dist/CableDrop.apk
@@ -191,7 +192,7 @@ a counterpart in the other language pointing at a file that exists, and each
 
 ## Status & compatibility
 
-- macOS 12+ (universal), Windows 10+ (amd64/arm64), Linux with GTK3 + WebKitGTK 4.1, Android 7.0+ (APK, minSdk 24).
+- macOS 12+ (arm64 / amd64), Windows 10+ (amd64/arm64), Linux with GTK3 + WebKitGTK 4.1, Android 7.0+ (APK, minSdk 24).
 - Tested against `adb` from current Platform Tools; very old adb falls back to polling.
 
 ## Contributing

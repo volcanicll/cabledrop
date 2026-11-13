@@ -33,7 +33,7 @@ ifeq ($(shell uname -s),Linux)
   TAGS += gtk3
 endif
 
-.PHONY: all version build run app app-universal dmg windows linux icons icons-android apk dist release test vet fmt clean
+.PHONY: all version build run app app-arch app-universal dmg dmg-universal windows linux icons icons-android apk dist release test vet fmt clean
 
 all: build
 
@@ -59,12 +59,49 @@ app: build icons
 	@codesign --force --deep --sign - $(APPNAME).app >/dev/null 2>&1 || true
 	@echo "  $(APPNAME).app"
 
-## macOS bundle for both architectures, lipo'd into one universal app.
+## macOS bundles, one slice each. `make dmg` ships one per architecture: a
+## universal app is twice the bytes on disk for a Mac that only ever runs one
+## of the two slices.
 ##
 ## The Wails macOS backend is cgo, so each slice is a real native compile with
 ## clang told which architecture to target — setting GOARCH alone gets you a
 ## linker error, not a fat binary.
 DARWIN_MIN = -mmacosx-version-min=12.0
+app-arch: icons
+	@rm -rf build/darwin/$(APPNAME)-*.app
+	@for arch in arm64 amd64; do \
+		case $$arch in amd64) clang_arch=x86_64 ;; *) clang_arch=$$arch ;; esac; \
+		app=build/darwin/$(APPNAME)-$$arch.app; \
+		echo "  darwin/$$arch"; \
+		mkdir -p $$app/Contents/MacOS $$app/Contents/Resources; \
+		CGO_ENABLED=1 GOARCH=$$arch \
+		CGO_CFLAGS="$(DARWIN_MIN) -arch $$clang_arch" \
+		CGO_LDFLAGS="$(DARWIN_MIN) -arch $$clang_arch" \
+		go build $(VCS) -tags "$(TAGS)" -trimpath -ldflags="$(LDFLAGS)" \
+			-o $$app/Contents/MacOS/$(BINARY) . || exit 1; \
+		cp build/darwin/AppIcon.icns $$app/Contents/Resources/AppIcon.icns; \
+		sed 's/@VERSION@/$(VERSION)/' build/darwin/Info.plist > $$app/Contents/Info.plist; \
+		codesign --force --deep --sign - $$app >/dev/null 2>&1 || true; \
+	done
+
+## macOS disk images, one per architecture, with the usual drag-to-Applications
+## shortcut.
+dmg: app-arch
+	@mkdir -p dist
+	@for arch in arm64 amd64; do \
+		staging=build/darwin/dmg-$$arch; \
+		rm -rf $$staging; \
+		mkdir -p $$staging; \
+		cp -R build/darwin/$(APPNAME)-$$arch.app $$staging/$(APPNAME).app; \
+		ln -s /Applications $$staging/Applications; \
+		hdiutil create -quiet -volname "$(APPNAME)" -srcfolder $$staging \
+			-ov -format ULMO "dist/$(APPNAME)-$(VERSION)-macos-$$arch.dmg"; \
+		rm -rf $$staging; \
+		echo "  dist/$(APPNAME)-$(VERSION)-macos-$$arch.dmg"; \
+	done
+
+## macOS bundle for both architectures, lipo'd into one universal app, plus a
+## single dmg. Kept for anyone who wants one file for both kinds of Mac.
 app-universal: icons
 	@rm -rf $(APPNAME).app build/darwin/arch
 	@mkdir -p $(APPNAME).app/Contents/MacOS $(APPNAME).app/Contents/Resources build/darwin/arch
@@ -84,17 +121,17 @@ app-universal: icons
 	@codesign --force --deep --sign - $(APPNAME).app >/dev/null 2>&1 || true
 	@echo "  $(APPNAME).app (universal: $$(lipo -archs $(APPNAME).app/Contents/MacOS/$(BINARY)))"
 
-## macOS disk image, with the usual drag-to-Applications shortcut.
-dmg: app-universal
+## The universal bundle as one disk image, for anyone who wants a single file.
+dmg-universal: app-universal
 	@mkdir -p dist
 	@rm -rf build/darwin/dmg
 	@mkdir -p build/darwin/dmg
 	@cp -R $(APPNAME).app build/darwin/dmg/
 	@ln -s /Applications build/darwin/dmg/Applications
 	@hdiutil create -quiet -volname "$(APPNAME)" -srcfolder build/darwin/dmg \
-		-ov -format ULMO "dist/$(APPNAME)-$(VERSION).dmg"
+		-ov -format ULMO "dist/$(APPNAME)-$(VERSION)-macos-universal.dmg"
 	@rm -rf build/darwin/dmg
-	@echo "  dist/$(APPNAME)-$(VERSION).dmg"
+	@echo "  dist/$(APPNAME)-$(VERSION)-macos-universal.dmg"
 
 ## Windows executables, cross-compiled. No cgo, so this works from macOS.
 windows: icons
@@ -171,4 +208,5 @@ fmt:
 	gofmt -w .
 
 clean:
-	rm -rf $(BINARY) $(APPNAME).app cabledrop.app dist build/icons rsrc_windows_*.syso
+	rm -rf $(BINARY) $(APPNAME).app cabledrop.app dist build/icons \
+		build/darwin/$(APPNAME)-*.app build/darwin/dmg-* rsrc_windows_*.syso

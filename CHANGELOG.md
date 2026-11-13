@@ -4,6 +4,16 @@ All notable changes to CableDrop are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); versioning is
 [SemVer](https://semver.org/).
 
+## Unreleased
+
+### Changed
+
+- macOS builds ship one per architecture. `make dmg` now produces separate
+  arm64 and amd64 dmgs instead of one universal bundle: the installed app
+  drops from 22.5 MB to 11/12 MB and the download from 9.8 MB to 3.4/4.0 MB.
+  `make dmg-universal` still builds the fat app and dmg for anyone who wants
+  a single file.
+
 ## 0.0.4 - 2026-10-25
 
 ### Added

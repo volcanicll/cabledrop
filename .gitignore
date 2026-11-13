@@ -6,6 +6,8 @@
 /build/windows/*.syso
 /build/darwin/arch/
 /build/darwin/dmg/
+/build/darwin/dmg-*/
+/build/darwin/CableDrop-*.app/
 rsrc_windows_*.syso
 .DS_Store
 /genicons

@@ -28,7 +28,7 @@ permissions:
 
 jobs:
   macos:
-    name: macOS (universal .app, .dmg)
+    name: macOS (arm64 + amd64 .app, .dmg)
     runs-on: macos-14
     steps:
       - uses: actions/checkout@v4
@@ -47,40 +47,45 @@ jobs:
       - name: Build .app and .dmg
         run: make dmg
 
-      - name: Smoke-test the packaged binary
+      - name: Smoke-test the packaged binaries
         run: |
           set -euo pipefail
-          archs=$(lipo -archs CableDrop.app/Contents/MacOS/cabledrop)
-          echo "architectures: $archs"
-          # Both slices must be present, or the "universal" claim is a lie.
-          case "$archs" in
-            *x86_64*) ;;
-            *) echo "missing x86_64 slice" >&2; exit 1 ;;
-          esac
-          case "$archs" in
-            *arm64*) ;;
-            *) echo "missing arm64 slice" >&2; exit 1 ;;
-          esac
-          # --gen-icons runs before any GUI setup, so the packaged binary can be
-          # exercised on a headless runner.
-          ./CableDrop.app/Contents/MacOS/cabledrop --gen-icons /tmp/smoke
-          test -f /tmp/smoke/app-256.png
+          for arch in arm64 amd64; do
+            case "$arch" in
+              arm64) want=arm64 ;;
+              amd64) want=x86_64 ;;
+            esac
+            app="build/darwin/CableDrop-$arch.app"
+            got=$(lipo -archs "$app/Contents/MacOS/cabledrop")
+            echo "$app: $got"
+            # Each bundle must hold its own slice, not the other one's.
+            case "$got" in
+              *"$want"*) ;;
+              *) echo "$app is $got, want $want" >&2; exit 1 ;;
+            esac
+            # --gen-icons runs before any GUI setup, so the packaged binary can
+            # be exercised on a headless runner.
+            "$app/Contents/MacOS/cabledrop" --gen-icons "/tmp/smoke-$arch"
+            test -f "/tmp/smoke-$arch/app-256.png"
+          done
 
-      - name: Zip the app bundle
+      - name: Zip the app bundles
         run: |
           set -euo pipefail
           # ditto, not zip: it preserves the bundle's symlinks, permissions and
           # extended attributes, which is what makes the .app still launch
           # after a round trip.
-          ditto -c -k --sequesterRsrc --keepParent CableDrop.app \
-            "dist/CableDrop-${VERSION}-macos-universal.zip"
+          for arch in arm64 amd64; do
+            ditto -c -k --sequesterRsrc --keepParent "build/darwin/CableDrop-$arch.app" \
+              "dist/CableDrop-${VERSION}-macos-$arch.zip"
+          done
 
       - uses: actions/upload-artifact@v4
         with:
           name: macos
           path: |
             dist/*.dmg
-            dist/*-macos-universal.zip
+            dist/*-macos-*.zip
           if-no-files-found: error
 
   windows:
@@ -284,8 +289,10 @@ jobs:
           # site points at. The versioned files stay for anyone pinning a
           # specific build.
           declare -A alias=(
-            ["CableDrop-${VERSION}.dmg"]="CableDrop-macos-universal.dmg"
-            ["CableDrop-${VERSION}-macos-universal.zip"]="CableDrop-macos-universal.zip"
+            ["CableDrop-${VERSION}-macos-arm64.dmg"]="CableDrop-macos-arm64.dmg"
+            ["CableDrop-${VERSION}-macos-amd64.dmg"]="CableDrop-macos-amd64.dmg"
+            ["CableDrop-${VERSION}-macos-arm64.zip"]="CableDrop-macos-arm64.zip"
+            ["CableDrop-${VERSION}-macos-amd64.zip"]="CableDrop-macos-amd64.zip"
             ["CableDrop-${VERSION}-windows-amd64.zip"]="CableDrop-windows-amd64.zip"
             ["CableDrop-${VERSION}-windows-arm64.zip"]="CableDrop-windows-arm64.zip"
             ["CableDrop-${VERSION}-linux-amd64.tar.gz"]="CableDrop-linux-amd64.tar.gz"
